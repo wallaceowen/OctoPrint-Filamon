@@ -1,0 +1,4 @@
+include README.md
+recursive-include octoprint_filamon/templates *
+recursive-include octoprint_filamon/translations *
+recursive-include octoprint_filamon/static *
