@@ -35,7 +35,7 @@ CRC16_CCITT_TABLE = [
 
 def crc16(data, crc=0):
     """Calculate CRC16 using the given table.
-    `data`      - data for calculating CRC, must be a string
+    `data`      - data for calculating CRC, must be a string or array of bytes
     `crc`       - initial value
     `table`     - table for caclulating CRC (list of 256 integers)
     Return calculated value of CRC
@@ -48,5 +48,6 @@ def crc16(data, crc=0):
         for byte in data:
             crc = ((crc<<8)&0xff00)\
                     ^ CRC16_CCITT_TABLE[((crc>>8)&0xff)^byte]
+
     return crc & 0xffff
 

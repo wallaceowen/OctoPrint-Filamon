@@ -13,11 +13,7 @@ import json
 
 import octoprint.plugin
 
-from . import filamon_connection
-
-# Filamon message types
-SENSOR_QUERY = 1
-
+from . import filamon_connection as fc
 
 class FilamonPlugin(octoprint.plugin.SettingsPlugin,
     octoprint.plugin.AssetPlugin,
@@ -27,39 +23,37 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
 
     def on_startup(self, host, port):
         self._logger.info("Filament Monitor at startup.")
-        self.connected = False
-        self.filamon = filamon_connection.FilamonConnection(self._printer, self._logger)
+        self.filamon = fc.FilamonConnection(self._printer, self._logger)
 
-    def exchange(self):
+    def exchange(self, mt):
         # Send request
-        self.filamon.send_data(SENSOR_QUERY})
-        reply = self.filamon.recv_data()
-        if reply:
-            json_msg = reply[1]
-            # self._plugin_manager.send_plugin_message("FilamentMonitor", {"temp": 38.0, "humidity": .48, "weight": 788})
+        bm = self.filamon.compose(mt)
+        self.filamon.send_msg(bm)
+        try:
+            reply = self.filamon.recv_msg()
+        except fc.NoData:
+            self._logger.info("Filamon not talking to us")
+        except (fc.NoConnection, fc.ShortMsg, fc.BadMsgType, fc.BadSize, fc.BadCRC) as err:
+            self._logger.info("Caught exception %s", err)
+        else:
+            if reply[0] == MT_STATUS:
+                json_bytes = reply[1]
+                json_msg = json_bytes.decode('utf-8')
+                json_data = json.loads(json_msg)
             self._plugin_manager.send_plugin_message("FilamentMonitor", json_msg)
 
     def on_after_startup(self):
         self._logger.info("Filament Monitor after startup")
-        # self._logger.info("serial port: {}".format(self._settings.global_get(["serial"])))
-        # ports, bauds, prefbaud, autoc = self._printer.get_connection_options()
-        # ports, bauds, prefbaud, autoc = PrinterInterface.get_connection_options()
-        # options_dict = PrinterInterface.get_connection_options()
-        # ports = options_dict["ports"]
-        # bauds = options_dict["baudrates"]
-        # prefbaud = options_dict["portPreference"]
-        # autoc =  options_dict["autoconnect"]
-        # self._logger.info(f"ports: {ports} bauds: {bauds} prefbaud: {prefbaud} autoconnect: {autoc}")
-        self.connected = self.filamon.connect()
-        if self.connected:
+        self.filamon.connect()
+        if self.filamon.connected():
             # Reset the monitor on our startup so we know it doesn't give us anything we're not yet
             # prepared to handle
-            # self.filamon.reset_monitor()
-            self.exchange()
+            self.filamon.send_reset()
+            self.exchange(fc.MT_STATUS)
 
     def on_print_progress(self):
-        if self.connected:
-            self.exchange()
+        if self.filamon.connected():
+            self.exchange(fc.MT_STATUS)
 
 
     ##~~ SettingsPlugin mixin
