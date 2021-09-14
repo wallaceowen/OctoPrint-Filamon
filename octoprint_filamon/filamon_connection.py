@@ -107,7 +107,8 @@ class FilamonConnection():
     def recv_data(self):
         if self.interface:
             self._logger.info("trying to receive data")
-            msg = self.interface.read()
+            # msg = self.interface.read()
+            msg = self.read_message()
             if len(msg):
                 print(f"   -=-=-=-=- msg: {msg}")
                 msg_type, body = binfmt.decompose_msg(msg)
@@ -115,4 +116,15 @@ class FilamonConnection():
             else:
                 self._logger.info("No message found")
 
+    def read_message(self):
+        mlist = []
+        while True:
+            soh_byte = self.interface.read(1)
+            if soh_byte == binfmt.SOH:
+                break
+        # read the msg type and len
+        mtype = self.interface.read(1)
+        msglen = self.interface.read(2)
+        body = self.interface.read(msglen)
+        crc = self.interface.read(2)
 
