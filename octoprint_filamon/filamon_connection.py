@@ -74,7 +74,6 @@ class FilamonConnection():
         self.interface = None
         self.debug = False
         self.show_bytes = False
-        self.retries = FILAMON_RETRIES
 
     def set_connected_cb(self, connected_cb):
         self.connected_cb = connected_cb
@@ -304,7 +303,7 @@ class FilamonConnection():
     def get_timeout(self):
         return self.interface.timeout
 
-    def send_reset(self):
+    def perform_reset(self):
         if self.interface:
             # The reset line is attached to RTS.  Pull it low for 100mS
             self.interface.rts = 0

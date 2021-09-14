@@ -9,11 +9,14 @@ from __future__ import absolute_import
 #
 # Take a look at the documentation on what other plugin mixins are available.
 
+import time
 import json
 
 import octoprint.plugin
 
 from . import filamon_connection as fc
+
+TEST = True
 
 class FilamonPlugin(octoprint.plugin.SettingsPlugin,
     octoprint.plugin.AssetPlugin,
@@ -29,12 +32,34 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
         # Send request
         bm = self.filamon.compose(mt)
         self.filamon.send_msg(bm)
+
+        for tries in range(fc.FILAMON_RETRIES):
+            _type = None
+            try:
+                _type, body = self.filamon.recv_msg()
+            except fc.NoData:
+                self._logger.debug("Filamon got no data")
+                time.sleep(0.01)
+                continue
+            except (fc.ShortMsg, fc.BadMsgType, fc.BadSize, fc.BadCRC) as err:
+                self._logger.debug("Caught exception %s", err)
+                continue
+            except fc.NoConnection:
+                logger.info('SERVER: lost connection')
+                raise
+            else:
+                return (_type, body)
+
+        raise fc.RetriesExhausted()
+
+    # Fetch the latest status from Filamon
+    def send_status(self):
         try:
-            reply = self.filamon.recv_msg()
-        except fc.NoData:
-            self._logger.info("Filamon not talking to us")
-        except (fc.NoConnection, fc.ShortMsg, fc.BadMsgType, fc.BadSize, fc.BadCRC) as err:
-            self._logger.info("Caught exception %s", err)
+            reply = self.exchange(fc.MT_STATUS)
+        except fc.RetriesExhausted:
+            self._logger.debug("Filamon not talking to us")
+        except fc.NoConnection:
+            self._logger.debug("Filamon not plugged in")
         else:
             if reply[0] == MT_STATUS:
                 json_bytes = reply[1]
@@ -42,18 +67,20 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
                 json_data = json.loads(json_msg)
             self._plugin_manager.send_plugin_message("FilamentMonitor", json_msg)
 
+    # Connect to and reset the device on after startup
     def on_after_startup(self):
-        self._logger.info("Filament Monitor after startup")
+        self._logger.info("Filament Monitor on_after_startup")
         self.filamon.connect()
         if self.filamon.connected():
-            # Reset the monitor on our startup so we know it doesn't give us anything we're not yet
-            # prepared to handle
-            self.filamon.send_reset()
-            self.exchange(fc.MT_STATUS)
+            # Reset the monitor on our startup to put it in a known state
+            self.filamon.perform_reset()
+            if TEST:
+                time.sleep(2)
+                self.send_status()
 
     def on_print_progress(self):
         if self.filamon.connected():
-            self.exchange(fc.MT_STATUS)
+            self.send_status()
 
 
     ##~~ SettingsPlugin mixin
