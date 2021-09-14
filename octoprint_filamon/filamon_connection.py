@@ -11,6 +11,8 @@ import octoprint.plugin
 from octoprint.printer import PrinterInterface
 import octoprint.settings
 
+from . import binfmt
+
 # How long we hold down the reset line
 FILAMON_RESET_DURATION = 0.1
 FILAMON_TIMEOUT = 1.0
@@ -33,7 +35,6 @@ class FilamonConnection():
 
         if self.interface:
             self.disconnect()
-
 
         ports = glob.glob("/dev/ttyUSB*")
         _, exclude, _, _ = self._printer.get_current_connection()
@@ -97,25 +98,21 @@ class FilamonConnection():
                 else:
                     break
 
-    def send_json(self, data):
-        self._logger.info(f"sending {data} as json")
+    def send_data(self, msg_type, data=""):
+        self._logger.info(f"sending {data} as binary")
         if self.interface:
-            json_str = json.dumps(data)
-            self._logger.info(f"sending json str {json_str}")
-            encoded = json_str.encode('utf-8')
-            self._logger.info(f"encoded: {encoded}")
-            self.interface.write(json_str.encode('utf-8'))
+            msg = binfmt.build_msg(msg_type, data)
+            self.interface.write(msg)
 
-    def recv_json(self):
+    def recv_data(self):
         if self.interface:
-            self._logger.info("trying to receive a json string")
-            json_bytes = self.interface.read()
-            if len(json_bytes):
-                print(f"   -=-=-=-=- json_bytes: {json_bytes}")
-                json_str = json_bytes.decode('utf-8')
-                self._logger.info(f"received json string {json_str}")
-                return json.loads(json_str)
+            self._logger.info("trying to receive data")
+            msg = self.interface.read()
+            if len(msg):
+                print(f"   -=-=-=-=- msg: {msg}")
+                msg_type, body = binfmt.decompose_msg(msg)
+                return (msg_type, body)
             else:
-                self._logger.info("No json string found")
+                self._logger.info("No message found")
 
 

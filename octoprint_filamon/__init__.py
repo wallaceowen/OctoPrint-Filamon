@@ -15,6 +15,10 @@ import octoprint.plugin
 
 from . import filamon_connection
 
+# Filamon message types
+SENSOR_QUERY = 1
+
+
 class FilamonPlugin(octoprint.plugin.SettingsPlugin,
     octoprint.plugin.AssetPlugin,
     octoprint.plugin.TemplatePlugin,
@@ -28,10 +32,12 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
 
     def exchange(self):
         # Send request
-        self.filamon.send_json({'request': ['temp', 'humidity', 'weight']})
-        json_msg = self.filamon.recv_json()
-        # self._plugin_manager.send_plugin_message("FilamentMonitor", {"temp": 38.0, "humidity": .48, "weight": 788})
-        self._plugin_manager.send_plugin_message("FilamentMonitor", json.dumps(json_msg))
+        self.filamon.send_data(SENSOR_QUERY})
+        reply = self.filamon.recv_data()
+        if reply:
+            json_msg = reply[1]
+            # self._plugin_manager.send_plugin_message("FilamentMonitor", {"temp": 38.0, "humidity": .48, "weight": 788})
+            self._plugin_manager.send_plugin_message("FilamentMonitor", json_msg)
 
     def on_after_startup(self):
         self._logger.info("Filament Monitor after startup")
