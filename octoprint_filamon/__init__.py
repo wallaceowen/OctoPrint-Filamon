@@ -74,6 +74,7 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
         if self.filamon.connected():
             # Reset the monitor on our startup to put it in a known state
             self.filamon.perform_reset()
+            # just for testing (so we don't have to wait for a print to get to 1%!)
             if TEST:
                 time.sleep(2)
                 self.send_status()
