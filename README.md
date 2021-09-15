@@ -1,6 +1,16 @@
 # OctoPrint-Filamon
 
-**TODO:** Describe what your plugin does.
+This plugin connects to a filament monitor and sends it's information to OctoFarm using self._plugin_manager.send_plugin_message("FilamentMonitor", json_msg)
+
+json_msg is a dict that look like: {"printername": "bender_prime", "spool_id": 1423659708, "temp": 38.0, "humidity": .48, "weight": 788}
+where:
+   spool_id is an RFID tag attached to the spool by the receiving department
+   temp is the temp of the filament in the spool container
+   humidity is the humidity of the filament in the spool container
+   weight is the weight of the spool in the spool container (including the spool).
+
+The empty spool weight is expected to be stored in a spools table or (more factored) a spool_type table with a spool_type remote key in the spools table).
+
 
 ## Setup
 
@@ -9,9 +19,8 @@ or manually using this URL:
 
     https://github.com/wallaceowen/OctoPrint-Filamon/archive/master.zip
 
-**TODO:** Describe how to install your plugin, if more needs to be done than just installing it via pip or through
-the plugin manager.
+Learning how to tell people how to install my plugin still (like what it expects for the serial port, etc)
 
 ## Configuration
 
-**TODO:** Describe your plugin's configuration options (if any).
+Still learning how configuration works by looking at other's code
