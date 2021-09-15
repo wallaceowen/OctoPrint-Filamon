@@ -1,6 +1,6 @@
 # OctoPrint-Filamon
 
-This plugin connects to a filament monitor and sends it's information to OctoFarm using self._plugin_manager.send_plugin_message("FilamentMonitor", json_msg)
+This plugin connects to a filament monitor* and sends it's information to OctoFarm using self._plugin_manager.send_plugin_message("FilamentMonitor", json_msg)
 
 json_msg is a dict that look like: {"printername": "bender_prime", "spool_id": 1423659708, "temp": 38.0, "humidity": .48, "weight": 788}
 where:
@@ -10,6 +10,8 @@ where:
    weight is the weight of the spool in the spool container (including the spool).
 
 The empty spool weight is expected to be stored in a spools table or (more factored) a spool_type table with a spool_type remote key in the spools table).
+
+* The filament monitor is a small widget with temp, humidity, weight sensors and an RFID tag reader, using an ESP32, BME280, HX711 attached to a 5KG load cell.  It also has a 2.8-inch TFT with a resistive touch-screen and SD-card, and some room for expansion (extra pins brought out to headers with power and ground).  It's code (currently called FilaScale) is another repo of mine that's being actively developed.
 
 
 ## Setup
