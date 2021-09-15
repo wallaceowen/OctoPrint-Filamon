@@ -26,7 +26,6 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
 
     def on_startup(self, host, port):
         self._logger.info("Filament Monitor at startup.")
-        self.filamon = fc.FilamonConnection(self._printer, self._logger)
 
     def exchange(self, mt):
         # Send request
@@ -38,11 +37,11 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
             try:
                 _type, body = self.filamon.recv_msg()
             except fc.NoData:
-                self._logger.debug("Filamon got no data")
+                self._logger.info("Filamon got no data")
                 time.sleep(0.01)
                 continue
             except (fc.ShortMsg, fc.BadMsgType, fc.BadSize, fc.BadCRC) as err:
-                self._logger.debug("Caught exception %s", err)
+                self._logger.info("Caught exception %s", err)
                 continue
             except fc.NoConnection:
                 logger.info('SERVER: lost connection')
@@ -57,26 +56,39 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
         try:
             reply = self.exchange(fc.MT_STATUS)
         except fc.RetriesExhausted:
-            self._logger.debug("Filamon not talking to us")
+            self._logger.info("Filamon not talking to us")
         except fc.NoConnection:
-            self._logger.debug("Filamon not plugged in")
+            self._logger.info("Filamon not plugged in")
         else:
-            if reply[0] == MT_STATUS:
-                json_bytes = reply[1]
+            _type, body = reply
+            if _type == MT_STATUS:
+                json_bytes = body
                 json_msg = json_bytes.decode('utf-8')
                 json_data = json.loads(json_msg)
-            self._plugin_manager.send_plugin_message("FilamentMonitor", json_msg)
+                self._logger.info("spool status = %s", json_data)
+            else:
+                self._logger.info("Received message type %s", _type)
+            self._plugin_manager.send_plugin_message("FilamentMonitor", json_data)
 
     # Connect to and reset the device on after startup
     def on_after_startup(self):
-        self._logger.info("Filament Monitor on_after_startup")
+        self._logger.info("Filament Monitor on_after_startup.  Config: %s, %s",
+                self._settings.get(["port"]), self._settings.get(["baudrate"]))
+        _, exclude, _, _ = self._printer.get_current_connection()
+        preferred = self._settings.get(["port"])
+        baudrate = self._settings.get(["baudrate"])
+        self._logger.info("preferred = %s baudrate = %s", preferred, baudrate)
+        self.filamon = fc.FilamonConnection(preferred, exclude, baudrate)
         self.filamon.connect()
         if self.filamon.connected():
+            self._logger.info("Filament Monitor connected.")
             # Reset the monitor on our startup to put it in a known state
             self.filamon.perform_reset()
             # just for testing (so we don't have to wait for a print to get to 1%!)
             if TEST:
+                self._logger.info("sleeping for 2")
                 time.sleep(2)
+                self._logger.info("sending status")
                 self.send_status()
 
     def on_print_progress(self):
@@ -89,7 +101,12 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
     def get_settings_defaults(self):
         return {
             # put your plugin's default settings here
+            'port': '/dev/ttyUSB0',
+            'baudrate': 115200
         }
+
+    def get_template_vars(self):
+        return dict(port=self._settings.get(["port", "baudrate"]))
 
     ##~~ AssetPlugin mixin
 
@@ -128,7 +145,7 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
 # If you want your plugin to be registered within OctoPrint under a different name than what you defined in setup.py
 # ("OctoPrint-PluginSkeleton"), you may define that here. Same goes for the other metadata derived from setup.py that
 # can be overwritten via __plugin_xyz__ control properties. See the documentation for that.
-__plugin_name__ = "Filamon Plugin"
+__plugin_name__ = "Filament Monitor"
 
 # Starting with OctoPrint 1.4.0 OctoPrint will also support to run under Python 3 in addition to the deprecated
 # Python 2. New plugins should make sure to run under both versions for now. Uncomment one of the following
