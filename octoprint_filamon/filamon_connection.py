@@ -1,4 +1,24 @@
 # -*- coding: utf-8 -*-
+
+""" FilaMon connection class
+    Manages the transport layer between the filament monitor device and the FilaMon plugin.
+    This is a binary protocol
+    1 byte SYNC
+    1 byte message type
+    2 bytes uint16 length little-endian
+    length bytes of payload
+    2 bytes CRC16
+
+    The payload carried in these packets is a json dictionary with the state of the spool associated
+    with the named printer:
+    {"printername": "bender_prime", "spool_id": 1423659708, "temp": 38.0, "humidity": .48, "weight": 788}
+
+    The spool_id is a 48-bit unsigned number as read from a 125KHz RFID tag.  This is in support of automated
+    tracking of filament inventory.  Tag attached to spool at receiving department, read by filament monitor
+    as the sppol rotates in the drybox.
+
+    """
+
 from __future__ import absolute_import, unicode_literals
 
 import glob
@@ -16,6 +36,8 @@ from . import crc
 FILAMON_RESET_DURATION = 0.1
 FILAMON_TIMEOUT = 0.2
 FILAMON_BAUDRATE = 115200
+
+SYNC_BYTE = 0x55
 
 # Max size for payload
 MAX_DATA_SIZE=512
@@ -58,13 +80,15 @@ class BadMsgType(Exception):
     def __str__(self):
         return "Invalid Message type"
 
+# Simple hex dumper for byte arrays.  (I still haven't memorised the grammar of the new
+# formatting layout options.)
 def bytes_to_hex(msg):
     return ' '.join(["%2.2X"%b for b in msg])
 
 class FilamonConnection():
-    def __init__(self, preferred=None, exclude=None, baudrate=FILAMON_BAUDRATE, connected_cb = None):
+    def __init__(self, preferred=None, excluded=None, baudrate=FILAMON_BAUDRATE, connected_cb = None):
         self.preferred = preferred
-        self.exclude = exclude
+        self.excluded = excluded
         self.baudrate = baudrate
         self.connected_cb = connected_cb
         self.interface = None
@@ -93,18 +117,19 @@ class FilamonConnection():
             self.disconnect()
 
         globbed_ports = glob.glob("/dev/ttyUSB*")
-        print(f"globbed_ports: {globbed_ports}")
-        if self.exclude:
-            print(f"excluding: {self.exclude}")
-            globbed_ports.remove(self.exclude)
-
         ports = []
-        print(f"self.preferred: {self.preferred}")
-        print(f"ports: {ports}")
+
+        # Start with the preferred port.  Cull it from the glob first
         if self.preferred:
             if self.preferred in globbed_ports:
                 globbed_ports.remove(self.preferred)
             ports.append(self.preferred)
+
+        # Remove the excluded port (presumably the one attached to the printer)
+        if self.excluded:
+            globbed_ports.remove(self.excluded)
+
+        # Add the globbed ports
         ports.extend(globbed_ports)
 
         interface_config = {
@@ -113,7 +138,6 @@ class FilamonConnection():
                 "parity": serial.PARITY_NONE,
                 "stopbits": serial.STOPBITS_ONE,
                 "xonxoff": 0}
-        print(f"ports: {ports}")
         for port in ports:
             interface_config["port"] = port
             try:
