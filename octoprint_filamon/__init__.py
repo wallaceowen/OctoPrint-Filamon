@@ -11,6 +11,7 @@ from __future__ import absolute_import
 
 import time
 import json
+import threading
 
 import octoprint.plugin
 
@@ -30,6 +31,7 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
     def exchange(self, mt):
         # Send request
         bm = self.filamon.compose(mt)
+        self._logger.info(f"Sending {bm}")
         self.filamon.send_msg(bm)
 
         for tries in range(fc.FILAMON_RETRIES):
@@ -52,7 +54,7 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
         raise fc.RetriesExhausted()
 
     # Fetch the latest status from Filamon
-    def send_status(self):
+    def get_status(self):
         try:
             reply = self.exchange(fc.MT_STATUS)
         except fc.RetriesExhausted:
@@ -60,17 +62,32 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
         except fc.NoConnection:
             self._logger.info("Filamon not plugged in")
         else:
+            # self._logger.info("Filamon got msg!!")
             _type, body = reply
-            if _type == MT_STATUS:
-                json_bytes = body
-                json_msg = json_bytes.decode('utf-8')
+            if _type == fc.MT_STATUS:
+                # self._logger.info(f"Filamon got body {body}")
+                json_msg = body.decode('utf-8')
+                # self._logger.info(f"Filamon got json_msg {json_msg}")
+                tjson_msg = type(json_msg)
+                # self._logger.info(f"Filamon got type(json_msg) {tjson_msg}")
                 json_data = json.loads(json_msg)
-                self._logger.info("spool status = %s", json_data)
+                # self._logger.info(f"Filamon got json_data {json_data}")
+                return json_data
             else:
                 self._logger.info("Received message type %s", _type)
-            self._plugin_manager.send_plugin_message("FilamentMonitor", json_data)
+
+    def send_status(self, status):
+        self._plugin_manager.send_plugin_message("FilamentMonitor", status)
 
     # Connect to and reset the device on after startup
+
+    def floop(self):
+        status = self.get_status()
+        self._logger.info(f"floop got status {status}")
+        self.send_status(status)
+        self.timer = threading.Timer(1.0, self.floop)
+        self.timer.start()
+
     def on_after_startup(self):
         self._logger.info("Filament Monitor on_after_startup.  Config: %s, %s",
                 self._settings.get(["port"]), self._settings.get(["baudrate"]))
@@ -86,10 +103,8 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
             self.filamon.perform_reset()
             # just for testing (so we don't have to wait for a print to get to 1%!)
             if TEST:
-                self._logger.info("sleeping for 2")
-                time.sleep(2)
-                self._logger.info("sending status")
-                self.send_status()
+                self.timer = threading.Timer(1.0, self.floop)
+                self.timer.start()
 
     def on_print_progress(self):
         if self.filamon.connected():

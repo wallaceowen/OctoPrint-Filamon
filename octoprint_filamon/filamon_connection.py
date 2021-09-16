@@ -34,10 +34,11 @@ from . import crc
 
 # How long we hold down the reset line
 FILAMON_RESET_DURATION = 0.1
-FILAMON_TIMEOUT = 0.2
+FILAMON_TIMEOUT = 1.0
 FILAMON_BAUDRATE = 115200
 
 SYNC_BYTE = 0x55
+sbyte = "%2.2X"%(SYNC_BYTE)
 
 # Max size for payload
 MAX_DATA_SIZE=512
@@ -162,16 +163,17 @@ class FilamonConnection():
 
     # Send the given message to the device.
     # Raises NoConnection for all OS errors except EAGAIN and EINTR
-    def send_msg(self, msg):
+    def send_msg(self, bmsg):
 
         if not self.connected():
+            print(f"usb_comms.send_msg(): were not connected!!!")
             raise NoConnection()
 
         while True:
             try:
                 if self.show_bytes:
-                    print('<USB SERIAL> Sending {} to remote'.format(bytes_to_hex(msg)))
-                self.interface.write(msg)
+                    print('<USB SERIAL> Sending {} to remote'.format(bytes_to_hex(bmsg)))
+                self.interface.write(bmsg)
             except OSError:
                 if err.errno in (errno.EAGAIN, errno.EINTR):
                     print('send to remote device got EAGAIN')
@@ -188,8 +190,10 @@ class FilamonConnection():
     # Can raise:
     #  NoData, NoConnection
     def _read_bytes(self, qty):
+        # print(f"_read_bytes() reading {qty}")
 
         if not self.connected():
+            print(f"_read_bytes(): NOT CONNECTED!!!")
             raise NoConnection()
 
         to_read = qty
@@ -214,14 +218,20 @@ class FilamonConnection():
                 if bytes_read:
                     if self.show_bytes:
                         print('<USB SERIAL> Received {} from remote'.format(bytes_to_hex(values)))
-                    total.extend(values)
+                    for value in values:
+                        total.append(value)
+                    if self.show_bytes:
+                        print('<USB SERIAL> Received total now {} from remote'.format(bytes_to_hex(total)))
                     to_read -= bytes_read
                 else:
                     # If no btres read, break out
                     break
-        if not bytes_read:
+        if self.show_bytes:
+            print('<USB SERIAL> Received total {} from remote'.format(bytes_to_hex(total)))
+        if not len(total):
             raise NoData()
-        return ''.join(total)
+        # return bytes(total)
+        return bytes(total)
 
     # Eat all bytes in socket
     def drain_input(self):
@@ -275,10 +285,11 @@ class FilamonConnection():
 
         # Read bytes until we get a sync byte or an exception is raised
         while True:
-            ch = self._read_bytes(1)
+            bytes_in = self._read_bytes(1)
             if self.debug:
-                print("read_msg() looking for sync got {}".format(bytes_to_hex(ch)))
-            if not ord(ch) == SYNC_BYTE:
+                print("read_msg() looking for sync {} got {}".format(sbyte, bytes_in))
+                print("read_msg() type bytes_in {} type sync {}".format(type(bytes_in), type(SYNC_BYTE)))
+            if not bytes_in[0] == SYNC_BYTE:
                 continue
             else:
                 break
@@ -318,7 +329,7 @@ class FilamonConnection():
 
         # Compose the message to get our expected CRC
         # msg = chr(SYNC_BYTE)+header_bytes+body
-        msg = chr(SYNC_BYTE)
+        msg = [int(SYNC_BYTE)]
         msg.extend(header_bytes)
         msg.extend(body)
 
@@ -353,10 +364,11 @@ class FilamonConnection():
 
     # Compose a message.  Pass the type and optional body.
     def compose(self, _type, body=b''):
+
         vals = struct.pack("<BBH", 0x55, _type, len(body))
         ccrc = crc.crc16(vals+body)
         if self.debug:
-            print(f"compose: type = {type} vals = {bvals} body=[%s] ccrc=%4.4X",
+            print(f"compose: type = {type} vals = {vals} body=[%s] ccrc=%4.4X",
                     _type, bytes_to_hex(vals), bytes_to_hex(body), ccrc)
         if len(body):
             msg = struct.pack("<BBH%dsH"%len(body),
