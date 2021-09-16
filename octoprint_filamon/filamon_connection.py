@@ -144,7 +144,6 @@ class FilamonConnection():
                 else:
                     raise
             except Exception as err:
-                # print(f"opening {port} raised {err}")
                 raise
             else:
                 self.port = port
@@ -166,52 +165,13 @@ class FilamonConnection():
                 self.interface.write(bmsg)
             except OSError:
                 if err.errno in (errno.EAGAIN, errno.EINTR):
-                    # print('send to remote device got EAGAIN')
                     continue
                 else:
                     raise NoConnection()
             except Exception as err:
-                print(f"in usb_comms.send_msg(): unhandled {err}")
                 raise NoConnection()
             else:
                 break
-
-    # Low-level 'read some bytes'
-    # Can raise:
-    #  NoData, NoConnection
-    def _read_bytes(self, qty):
-
-        if not self.connected():
-            raise NoConnection()
-
-        to_read = qty
-        total = []
-        while to_read > 0:
-            bytes_read = 0
-            try:
-                values = self.interface.read(to_read)
-            except serial.SerialException as err:
-                if err.errno in (errno.EAGAIN, errno.EINTR):
-                    continue
-                else:
-                    raise NoConnection()
-            except serial.serialutil.SerialException as err:
-                raise NoConnection()
-            except Exception as err:
-                raise NoConnection()
-            else:
-                bytes_read = len(values)
-                if bytes_read:
-                    for value in values:
-                        total.append(value)
-                    to_read -= bytes_read
-                else:
-                    # If no bytes read, break out
-                    break
-
-        if not len(total):
-            raise NoData()
-        return bytes(total)
 
     # Eat all bytes in socket
     def drain_input(self):
@@ -227,10 +187,8 @@ class FilamonConnection():
                         else:
                             raise NoConnection()
                     except Exception as err:
-                        # print(f"in drain_input(): unhandled exception {err}")
                         raise NoConnection()
                     else:
-                        # print(f"monitor drooling {residue}")
                         break
                     self.interface.read(iw)
 
@@ -247,68 +205,135 @@ class FilamonConnection():
     #
     def recv_msg(self):
 
+        # Low-level 'read some bytes'
+        # Can raise:
+        #  NoData, NoConnection
+        def _read_bytes(qty):
+
+            if not self.connected():
+                raise NoConnection()
+
+            to_read = qty
+            total = []
+            while to_read > 0:
+                bytes_read = 0
+                try:
+                    values = self.interface.read(to_read)
+                except serial.SerialException as err:
+                    if err.errno in (errno.EAGAIN, errno.EINTR):
+                        continue
+                    else:
+                        raise NoConnection()
+                except serial.serialutil.SerialException as err:
+                    raise NoConnection()
+                except Exception as err:
+                    raise NoConnection()
+                else:
+                    bytes_read = len(values)
+                    if bytes_read:
+                        for value in values:
+                            total.append(value)
+                        to_read -= bytes_read
+                    else:
+                        # If no bytes read, break out
+                        break
+
+            if not len(total):
+                raise NoData()
+            return bytes(total)
+
         # Try to read an N-byte CRC.  Pass it the length of the CRC
         # in bytes and the struct form to exctract the value from the
         # received bytes
         def read_crc():
-            rcrc_bytes = self._read_bytes(2)
+            rcrc_bytes = _read_bytes(2)
             if len(rcrc_bytes) == 2:
                 results = struct.unpack('<H', rcrc_bytes)
                 return results[0]
             else:
                 raise ShortMsg()
 
-        # If the interface isn't configured, raise an exception, which
-        # will get it configured and call us again.
+        def read_header(header_bytes):
+
+            # If we can't, raise ShortMsg
+            if not len(header_bytes) == 3:
+                raise ShortMsg()
+
+            # Get type and length
+            _type, length = struct.unpack('<BH', header_bytes)
+
+            # Validate type
+            if not _type in range(NUM_VALID_MESSAGES):
+                raise BadMsgType()
+
+            # Validate length
+            if length > MAX_DATA_SIZE:
+                raise BadSize(length)
+
+            return _type, length
+
+
+        # Read bytes until we get a sync byte or an exception is raised
+        def read_sync():
+            while True:
+                bytes_in = _read_bytes(1)
+                if not bytes_in[0] == SYNC_BYTE:
+                    continue
+                else:
+                    break
+
+        def read_body(desired):
+            if desired:
+                try:
+                    body = _read_bytes(desired)
+                except Exception as err:
+                    raise
+                else:
+                    if not len(body) == desired:
+                        raise ShortMsg()
+                    else:
+                        return body
+            else:
+                return b''
+
+        def check_crc(header_bytes, body, rcrc):
+            # Compose the message to get our expected CRC
+            # msg = chr(SYNC_BYTE)+header_bytes+body
+            msg = [int(SYNC_BYTE)]
+            msg.extend(header_bytes)
+            msg.extend(body)
+
+            # compute the CRC of the received message
+            ccrc = crc.crc16(msg)
+
+            # Compare it to the sent CRC
+            return rcrc == ccrc
+
+
+
+        # READ A MESSAGE and CHECK IT
+        # ---------------------------
         if not self.interface:
             raise NoConnection()
 
-        # Read bytes until we get a sync byte or an exception is raised
-        while True:
-            bytes_in = self._read_bytes(1)
-            if not bytes_in[0] == SYNC_BYTE:
-                continue
-            else:
-                break
+        # Read bytes until we get a sync byte or we time out
+        read_sync()
 
-        # Try to read the header
-        header_bytes = self._read_bytes(3)
 
-        # If we can't, raise ShortMsg
-        if not len(header_bytes) == 3:
-            raise ShortMsg()
+        # Read the header
+        header_bytes = _read_bytes(3)
 
-        # Get type and length
-        _type, length = struct.unpack('<BH', header_bytes)
+        # extract the message type and length from the header
+        _type, length = read_header(header_bytes)
 
-        # Validate type
-        if not _type in range(NUM_VALID_MESSAGES):
-            raise BadMsgType()
-
-        # Validate length
-        if length > MAX_DATA_SIZE:
-            raise BadSize(length)
-
-        # Try to read body if there is one
-        body = b''
-        if length:
-            body = self._read_bytes(length)
-            if not len(body) == length:
-                raise ShortMsg()
-
-        # Compose the message to get our expected CRC
-        # msg = chr(SYNC_BYTE)+header_bytes+body
-        msg = [int(SYNC_BYTE)]
-        msg.extend(header_bytes)
-        msg.extend(body)
-
-        # compute the CRC.
-        ccrc = crc.crc16(msg)
+        # Read the body
+        body = read_body(length)
 
         # read the received CRC.
         rcrc = read_crc()
 
-        if rcrc == ccrc:
+        # Check the integrity of the message
+        if check_crc(header_bytes, body, rcrc):
             return _type, body
         else:
             raise BadCRC()

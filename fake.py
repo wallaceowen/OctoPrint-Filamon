@@ -18,10 +18,3 @@ while True:
 
 fake.stop()
 
-while True:
-    ans = input("press q<enter> to quit")
-    if ans == 'q':
-        break
-
-fake.stop()
-

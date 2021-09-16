@@ -40,7 +40,6 @@ class FakeFilamon(threading.Thread):
             try:
                 _type, body = self.filacon.recv_msg()
             except fc.NoData:
-                print('.')
                 time.sleep(0.01)
             except (fc.ShortMsg, fc.BadMsgType, fc.BadSize, fc.BadCRC) as err:
                 print("fake filamon: %s trying to get msg", str(err))

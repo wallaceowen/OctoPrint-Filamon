@@ -73,11 +73,13 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
 
     # Connect to and reset the device on after startup
 
-    def floop(self):
+    # For testing: once a second query the board and send the resulting status
+    # to octofarm
+    def testing_loop(self):
         status = self.get_status()
-        self._logger.info(f"floop got status {status}")
+        self._logger.info(f"testing_loop got status {status}")
         self.send_status(status)
-        self.timer = threading.Timer(1.0, self.floop)
+        self.timer = threading.Timer(1.0, self.testing_loop)
         self.timer.start()
 
     def on_after_startup(self):
@@ -94,7 +96,7 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
 
             # just for testing (so we don't have to wait for a print to get to 1%!)
             if TEST:
-                self.timer = threading.Timer(1.0, self.floop)
+                self.timer = threading.Timer(1.0, self.testing_loop)
                 self.timer.start()
 
     def on_print_progress(self):
