@@ -39,11 +39,9 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
             try:
                 _type, body = self.filamon.recv_msg()
             except fc.NoData:
-                self._logger.info("Filamon got no data")
-                time.sleep(0.01)
                 continue
             except (fc.ShortMsg, fc.BadMsgType, fc.BadSize, fc.BadCRC) as err:
-                self._logger.info("Caught exception %s", err)
+                self._logger.info("Caught error %s", err)
                 continue
             except fc.NoConnection:
                 logger.info('SERVER: lost connection')
@@ -62,19 +60,13 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
         except fc.NoConnection:
             self._logger.info("Filamon not plugged in")
         else:
-            # self._logger.info("Filamon got msg!!")
             _type, body = reply
             if _type == fc.MT_STATUS:
-                # self._logger.info(f"Filamon got body {body}")
                 json_msg = body.decode('utf-8')
-                # self._logger.info(f"Filamon got json_msg {json_msg}")
-                tjson_msg = type(json_msg)
-                # self._logger.info(f"Filamon got type(json_msg) {tjson_msg}")
                 json_data = json.loads(json_msg)
-                # self._logger.info(f"Filamon got json_data {json_data}")
                 return json_data
             else:
-                self._logger.info("Received message type %s", _type)
+                self._logger.debug("Received message type %s", _type)
 
     def send_status(self, status):
         self._plugin_manager.send_plugin_message("FilamentMonitor", status)
@@ -94,13 +86,12 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
         _, exclude, _, _ = self._printer.get_current_connection()
         preferred = self._settings.get(["port"])
         baudrate = self._settings.get(["baudrate"])
-        self._logger.info("preferred = %s baudrate = %s", preferred, baudrate)
         self.filamon = fc.FilamonConnection(preferred, exclude, baudrate)
         self.filamon.connect()
         if self.filamon.connected():
             self._logger.info("Filament Monitor connected.")
-            # Reset the monitor on our startup to put it in a known state
             self.filamon.perform_reset()
+
             # just for testing (so we don't have to wait for a print to get to 1%!)
             if TEST:
                 self.timer = threading.Timer(1.0, self.floop)

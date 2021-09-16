@@ -11,7 +11,6 @@ import threading
 from . import filamon_connection as fc
 
 JSON_DATA = {"printername": "bender_prime", "spool_id": 1423659708, "temp": 38.0, "humidity": .48, "weight": 788}
-# JSON_STRING = """{"printername": "bender_prime", "spool_id": 1423659708, "temp": 38.0, "humidity": .48, "weight": 788}"""
 JSON_STRING = json.dumps(JSON_DATA)
 
 class FakeFilamon(threading.Thread):
@@ -31,7 +30,6 @@ class FakeFilamon(threading.Thread):
     def handle_client_msg(self, _type, body):
         if _type == fc.MT_STATUS:
             request = body.decode('utf-8')
-            print(f'handle_reset_chip got {request} from {body}')
             reply = JSON_STRING
             msg = self.filacon.compose(fc.MT_STATUS, reply.encode('utf-8'))
             self.filacon.send_msg(msg)
@@ -42,7 +40,7 @@ class FakeFilamon(threading.Thread):
             try:
                 _type, body = self.filacon.recv_msg()
             except fc.NoData:
-                print('fake filamon got no queries, will check again soon')
+                print('.')
                 time.sleep(0.01)
             except (fc.ShortMsg, fc.BadMsgType, fc.BadSize, fc.BadCRC) as err:
                 print("fake filamon: %s trying to get msg", str(err))
@@ -51,8 +49,7 @@ class FakeFilamon(threading.Thread):
                 print('fake filamon: No connection')
                 raise
             else:
-                print('fake filamon: received type: %d body: [%s]'%(
-                    _type, body))
+                # print('fake filamon: received type: %d body: [%s]'%( _type, body))
                 self.handle_client_msg(_type, body)
                 return
         raise fc.RetriesExhausted()

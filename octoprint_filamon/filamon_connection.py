@@ -26,10 +26,6 @@ import serial
 import time
 import struct
 
-# import octoprint.plugin
-# from octoprint.printer import PrinterInterface
-# import octoprint.settings
-
 from . import crc
 
 # How long we hold down the reset line
@@ -93,7 +89,6 @@ class FilamonConnection():
         self.baudrate = baudrate
         self.connected_cb = connected_cb
         self.interface = None
-        self.debug = False
         self.show_bytes = False
 
     def set_connected_cb(self, connected_cb):
@@ -145,12 +140,11 @@ class FilamonConnection():
                 ser = serial.Serial(**interface_config)
             except serial.SerialException as err:
                 if err.errno == 2:
-                    print(f"Attempt to connect to non-existent serial port {port} raised {err}")
                     continue
                 else:
-                    print(f"opening {port} raised {err}")
+                    raise
             except Exception as err:
-                print(f"opening {port} raised {err}")
+                # print(f"opening {port} raised {err}")
                 raise
             else:
                 self.port = port
@@ -158,7 +152,6 @@ class FilamonConnection():
                 self.interface.timeout = FILAMON_TIMEOUT
                 if self.connected_cb:
                     self.connected_cb(port)
-                print(f"Found port {port} serial instance {ser}")
                 return True
 
     # Send the given message to the device.
@@ -166,17 +159,14 @@ class FilamonConnection():
     def send_msg(self, bmsg):
 
         if not self.connected():
-            print(f"usb_comms.send_msg(): were not connected!!!")
             raise NoConnection()
 
         while True:
             try:
-                if self.show_bytes:
-                    print('<USB SERIAL> Sending {} to remote'.format(bytes_to_hex(bmsg)))
                 self.interface.write(bmsg)
             except OSError:
                 if err.errno in (errno.EAGAIN, errno.EINTR):
-                    print('send to remote device got EAGAIN')
+                    # print('send to remote device got EAGAIN')
                     continue
                 else:
                     raise NoConnection()
@@ -190,10 +180,8 @@ class FilamonConnection():
     # Can raise:
     #  NoData, NoConnection
     def _read_bytes(self, qty):
-        # print(f"_read_bytes() reading {qty}")
 
         if not self.connected():
-            print(f"_read_bytes(): NOT CONNECTED!!!")
             raise NoConnection()
 
         to_read = qty
@@ -208,29 +196,21 @@ class FilamonConnection():
                 else:
                     raise NoConnection()
             except serial.serialutil.SerialException as err:
-                print(f"in _read_bytes(): unhandled serial exception {err}")
                 raise NoConnection()
             except Exception as err:
-                print(f"in _read_bytes(): unhandled exception {err}")
                 raise NoConnection()
             else:
                 bytes_read = len(values)
                 if bytes_read:
-                    if self.show_bytes:
-                        print('<USB SERIAL> Received {} from remote'.format(bytes_to_hex(values)))
                     for value in values:
                         total.append(value)
-                    if self.show_bytes:
-                        print('<USB SERIAL> Received total now {} from remote'.format(bytes_to_hex(total)))
                     to_read -= bytes_read
                 else:
-                    # If no btres read, break out
+                    # If no bytes read, break out
                     break
-        if self.show_bytes:
-            print('<USB SERIAL> Received total {} from remote'.format(bytes_to_hex(total)))
+
         if not len(total):
             raise NoData()
-        # return bytes(total)
         return bytes(total)
 
     # Eat all bytes in socket
@@ -247,10 +227,10 @@ class FilamonConnection():
                         else:
                             raise NoConnection()
                     except Exception as err:
-                        print(f"in drain_input(): unhandled exception {err}")
+                        # print(f"in drain_input(): unhandled exception {err}")
                         raise NoConnection()
                     else:
-                        print(f"monitor drooling {residue}")
+                        # print(f"monitor drooling {residue}")
                         break
                     self.interface.read(iw)
 
@@ -286,9 +266,6 @@ class FilamonConnection():
         # Read bytes until we get a sync byte or an exception is raised
         while True:
             bytes_in = self._read_bytes(1)
-            if self.debug:
-                print("read_msg() looking for sync {} got {}".format(sbyte, bytes_in))
-                print("read_msg() type bytes_in {} type sync {}".format(type(bytes_in), type(SYNC_BYTE)))
             if not bytes_in[0] == SYNC_BYTE:
                 continue
             else:
@@ -301,13 +278,8 @@ class FilamonConnection():
         if not len(header_bytes) == 3:
             raise ShortMsg()
 
-        if self.debug:
-            print("received 3 byte header {}".format(bytes_to_hex(header_bytes)))
-
         # Get type and length
         _type, length = struct.unpack('<BH', header_bytes)
-        if self.debug:
-            print(f"_type {type} length {length}")
 
         # Validate type
         if not _type in range(NUM_VALID_MESSAGES):
@@ -315,14 +287,11 @@ class FilamonConnection():
 
         # Validate length
         if length > MAX_DATA_SIZE:
-            print("Bad length field {} ({})".format(length, length))
             raise BadSize(length)
 
         # Try to read body if there is one
         body = b''
         if length:
-            if self.debug:
-                print(f"Trying to read {length} bytes body")
             body = self._read_bytes(length)
             if not len(body) == length:
                 raise ShortMsg()
@@ -333,10 +302,6 @@ class FilamonConnection():
         msg.extend(header_bytes)
         msg.extend(body)
 
-        if self.debug:
-            print("usb read_msg received {} byte msg (minus CRC): [{}]".format(
-                len(msg), bytes_to_hex(msg)))
-
         # compute the CRC.
         ccrc = crc.crc16(msg)
 
@@ -346,7 +311,6 @@ class FilamonConnection():
         if rcrc == ccrc:
             return _type, body
         else:
-            print(f"Error with crc: {rcrc} != {ccrc} msg = {msg}")
             raise BadCRC()
 
     def set_timeout(self, timeout):
@@ -367,9 +331,6 @@ class FilamonConnection():
 
         vals = struct.pack("<BBH", 0x55, _type, len(body))
         ccrc = crc.crc16(vals+body)
-        if self.debug:
-            print(f"compose: type = {type} vals = {vals} body=[%s] ccrc=%4.4X",
-                    _type, bytes_to_hex(vals), bytes_to_hex(body), ccrc)
         if len(body):
             msg = struct.pack("<BBH%dsH"%len(body),
                     0x55, _type, len(body), body, ccrc)

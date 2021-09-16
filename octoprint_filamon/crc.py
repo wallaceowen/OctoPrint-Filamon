@@ -40,13 +40,7 @@ def crc16(data, crc=0):
     `table`     - table for caclulating CRC (list of 256 integers)
     Return calculated value of CRC
     """
-    # import sys
-    # print('data {}'.format(["%2.2x"%b for b in data]))
-    # print('type(data) {}'.format(type(data)))
-    # sys.stdout.flush()
     for b in data:
-        # print('type(b) {}'.format(type(b)))
-        # sys.stdout.flush()
         crc = ((crc<<8)&0xff00)\
                 ^ CRC16_CCITT_TABLE[((crc>>8)&0xff)^b]
 
