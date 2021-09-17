@@ -21,10 +21,12 @@
 
 from __future__ import absolute_import, unicode_literals
 
+import sys
 import glob
 import serial
 import time
 import struct
+import errno
 
 from . import crc
 
@@ -123,7 +125,8 @@ class FilamonConnection():
 
         # Remove the excluded port (presumably the one attached to the printer)
         if self.excluded:
-            globbed_ports.remove(self.excluded)
+            if self.excluded in globbed_ports:
+                globbed_ports.remove(self.excluded)
 
         # Add the globbed ports
         ports.extend(globbed_ports)
@@ -163,7 +166,7 @@ class FilamonConnection():
         while True:
             try:
                 self.interface.write(bmsg)
-            except OSError:
+            except OSError as err:
                 if err.errno in (errno.EAGAIN, errno.EINTR):
                     continue
                 else:
@@ -240,6 +243,12 @@ class FilamonConnection():
 
             if not len(total):
                 raise NoData()
+            bstr = bytes(total)
+            try:
+                s = bstr.decode('utf-8')
+            except UnicodeDecodeError:
+                s = '|'
+            # sys.stdout.write(s)
             return bytes(total)
 
         # Try to read an N-byte CRC.  Pass it the length of the CRC
@@ -253,7 +262,7 @@ class FilamonConnection():
             else:
                 raise ShortMsg()
 
-        def read_header(header_bytes):
+        def parse_header(header_bytes):
 
             # If we can't, raise ShortMsg
             if not len(header_bytes) == 3:
@@ -277,9 +286,7 @@ class FilamonConnection():
         def read_sync():
             while True:
                 bytes_in = _read_bytes(1)
-                if not bytes_in[0] == SYNC_BYTE:
-                    continue
-                else:
+                if bytes_in[0] == SYNC_BYTE:
                     break
 
         def read_body(desired):
@@ -319,15 +326,16 @@ class FilamonConnection():
         # Read bytes until we get a sync byte or we time out
         read_sync()
 
-
         # Read the header
         header_bytes = _read_bytes(3)
 
         # extract the message type and length from the header
-        _type, length = read_header(header_bytes)
+        _type, length = parse_header(header_bytes)
+        # print("length of rec'd msg: {}".format(length))
 
         # Read the body
         body = read_body(length)
+        # print("body of rec'd msg: {}".format(bytes_to_hex(body)))
 
         # read the received CRC.
         rcrc = read_crc()

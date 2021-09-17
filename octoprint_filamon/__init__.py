@@ -28,12 +28,13 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
     def on_startup(self, host, port):
         self._logger.info("Filament Monitor at startup.")
 
-    def exchange(self, mt):
-        # Send request
-        bm = self.filamon.compose(mt)
-        self._logger.info(f"Sending {bm}")
+    # Tell the filament scale monitor to send us status.
+    # Either returns a tuple (msg_type, body) or raises RetriesExhausted
+    def exchange(self, mt, body=b''):
+        bm = self.filamon.compose(mt, body)
         self.filamon.send_msg(bm)
 
+        # Try to read that status
         for tries in range(fc.FILAMON_RETRIES):
             _type = None
             try:
@@ -41,24 +42,24 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
             except fc.NoData:
                 continue
             except (fc.ShortMsg, fc.BadMsgType, fc.BadSize, fc.BadCRC) as err:
-                self._logger.info("Caught error %s", err)
+                self._logger.info("Caught error %s sending query to filascale", err)
                 continue
             except fc.NoConnection:
-                logger.info('SERVER: lost connection')
+                self._logger.info('SERVER: lost connection')
                 raise
             else:
                 return (_type, body)
 
         raise fc.RetriesExhausted()
 
-    # Fetch the latest status from Filamon
+    # Fetch the latest status from FilaScale
     def get_status(self):
         try:
             reply = self.exchange(fc.MT_STATUS)
         except fc.RetriesExhausted:
-            self._logger.info("Filamon not talking to us")
+            self._logger.info("FilaScale not talking to us")
         except fc.NoConnection:
-            self._logger.info("Filamon not plugged in")
+            self._logger.info("FilaScale not plugged in")
         else:
             _type, body = reply
             if _type == fc.MT_STATUS:
@@ -68,22 +69,23 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
             else:
                 self._logger.debug("Received message type %s", _type)
 
-    def send_status(self, status):
-        self._plugin_manager.send_plugin_message("FilamentMonitor", status)
+    # Send status to octofarm
+    def send_status(self):
+        if self.status is None:
+            return
+        self._plugin_manager.send_plugin_message("FilamentMonitor", self.status)
 
     # Connect to and reset the device on after startup
 
-    # For testing: once a second query the board and send the resulting status
-    # to octofarm
-    def testing_loop(self):
-        status = self.get_status()
-        self._logger.info(f"testing_loop got status {status}")
-        self.send_status(status)
-        self.timer = threading.Timer(1.0, self.testing_loop)
-        self.timer.start()
+    # Keep up-to-date on the spool status, saving the latest in self.status
+    def filascale_poll(self):
+        self.status = self.get_status()
+        self._logger.info(f"FilaScale status: {self.status}")
+        return True
 
     def on_after_startup(self):
-        self._logger.info("Filament Monitor on_after_startup.  Config: %s, %s",
+        self.status = None
+        self._logger.info("Filament Monitor config: %s, %s",
                 self._settings.get(["port"]), self._settings.get(["baudrate"]))
         _, exclude, _, _ = self._printer.get_current_connection()
         preferred = self._settings.get(["port"])
@@ -91,30 +93,27 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
         self.filamon = fc.FilamonConnection(preferred, exclude, baudrate)
         self.filamon.connect()
         if self.filamon.connected():
-            self._logger.info("Filament Monitor connected.")
+            self._logger.info("Connected to FilaScale")
             self.filamon.perform_reset()
 
             # just for testing (so we don't have to wait for a print to get to 1%!)
             if TEST:
-                self.timer = threading.Timer(1.0, self.testing_loop)
+                self.timer = octoprint.util.RepeatedTimer(5.0, self.filascale_poll)
                 self.timer.start()
 
     def on_print_progress(self):
         if self.filamon.connected():
             self.send_status()
 
-
     ##~~ SettingsPlugin mixin
-
     def get_settings_defaults(self):
         return {
-            # put your plugin's default settings here
             'port': '/dev/ttyUSB0',
             'baudrate': 115200
         }
 
     def get_template_vars(self):
-        return dict(port=self._settings.get(["port", "baudrate"]))
+        return dict( port=self._settings.get(["port"]), baudrate=self._settings.get(["baudrate"]) )
 
     ##~~ AssetPlugin mixin
 
@@ -150,17 +149,9 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
         }
 
 
-# If you want your plugin to be registered within OctoPrint under a different name than what you defined in setup.py
-# ("OctoPrint-PluginSkeleton"), you may define that here. Same goes for the other metadata derived from setup.py that
-# can be overwritten via __plugin_xyz__ control properties. See the documentation for that.
 __plugin_name__ = "Filament Monitor"
 
-# Starting with OctoPrint 1.4.0 OctoPrint will also support to run under Python 3 in addition to the deprecated
-# Python 2. New plugins should make sure to run under both versions for now. Uncomment one of the following
-# compatibility flags according to what Python versions your plugin supports!
-#__plugin_pythoncompat__ = ">=2.7,<3" # only python 2
 __plugin_pythoncompat__ = ">=3,<4" # only python 3
-#__plugin_pythoncompat__ = ">=2.7,<4" # python 2 and 3
 
 def __plugin_load__():
     global __plugin_implementation__
