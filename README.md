@@ -15,6 +15,8 @@ The empty spool weight is expected to be stored in a spools table or (more facto
 
 Find it's code at https://github.com/wallaceowen/FilaScale/tree/master
 
+Find the board design at https://github.com/wallaceowen/FilaScaleBoard/tree/master
+
 ## Setup
 
 Install via the bundled [Plugin Manager](https://docs.octoprint.org/en/master/bundledplugins/pluginmanager.html)
