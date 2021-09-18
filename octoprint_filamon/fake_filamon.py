@@ -31,19 +31,17 @@ class FakeFilamon(threading.Thread):
         if _type == fc.MT_STATUS:
             request = body.decode('utf-8')
             reply = JSON_STRING
-            msg = self.filacon.compose(fc.MT_STATUS, reply.encode('utf-8'))
-            self.filacon.send_msg(msg)
+            self.filamon.send_body(mt, reply)
 
     def exchange(self):
         for tries in range(self.retries):
-            _type = None
             try:
                 _type, body = self.filacon.recv_msg()
             except fc.NoData:
                 time.sleep(0.01)
             except (fc.ShortMsg, fc.BadMsgType, fc.BadSize, fc.BadCRC) as err:
                 print("fake filamon: %s trying to get msg", str(err))
-                continue
+                raise
             except fc.NoConnection:
                 print('fake filamon: No connection')
                 raise

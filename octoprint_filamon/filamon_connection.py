@@ -31,7 +31,7 @@ import errno
 from . import crc
 
 # How long we hold down the reset line
-FILAMON_RESET_DURATION = 0.1
+FILAMON_RESET_DURATION = 1.0
 FILAMON_TIMEOUT = 1.0
 FILAMON_BAUDRATE = 115200
 
@@ -361,7 +361,6 @@ class FilamonConnection():
 
     # Compose a message.  Pass the type and optional body.
     def compose(self, _type, body=b''):
-
         vals = struct.pack("<BBH", 0x55, _type, len(body))
         ccrc = crc.crc16(vals+body)
         if len(body):
@@ -370,3 +369,7 @@ class FilamonConnection():
         else:
             msg = struct.pack("<BBHH", 0x55, _type, 0, ccrc)
         return msg
+
+    def send_body(self, _type, body=''):
+        msg = self.compose(_type, body.encode('utf-8'))
+        self.send_msg(msg)

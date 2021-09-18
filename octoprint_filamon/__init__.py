@@ -30,9 +30,8 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
 
     # Tell the filament scale monitor to send us status.
     # Either returns a tuple (msg_type, body) or raises RetriesExhausted
-    def exchange(self, mt, body=b''):
-        bm = self.filamon.compose(mt, body)
-        self.filamon.send_msg(bm)
+    def exchange(self, mt, body=''):
+        self.filamon.send_body(mt, body)
 
         # Try to read that status
         for tries in range(fc.FILAMON_RETRIES):
@@ -40,10 +39,11 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
             try:
                 _type, body = self.filamon.recv_msg()
             except fc.NoData:
+                # Should I reset the device here?
                 continue
             except (fc.ShortMsg, fc.BadMsgType, fc.BadSize, fc.BadCRC) as err:
                 self._logger.info("Caught error %s sending query to filascale", err)
-                continue
+                raise
             except fc.NoConnection:
                 self._logger.info('SERVER: lost connection')
                 raise
@@ -57,9 +57,13 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
         try:
             reply = self.exchange(fc.MT_STATUS)
         except fc.RetriesExhausted:
-            self._logger.info("FilaScale not talking to us")
+            self._logger.info("FilaScale not talking to us.  Resetting FilaScale.")
+            self.filamon.perform_reset()
         except fc.NoConnection:
             self._logger.info("FilaScale not plugged in")
+        except (fc.ShortMsg, fc.BadMsgType, fc.BadSize, fc.BadCRC) as err:
+            self._logger.info("FilaScale out of sync.  Resetting Filascale.")
+            self.filamon.perform_reset()
         else:
             _type, body = reply
             if _type == fc.MT_STATUS:
@@ -69,12 +73,6 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
             else:
                 self._logger.debug("Received message type %s", _type)
 
-    # Send status to octofarm
-    def send_status(self):
-        if self.status is None:
-            return
-        self._plugin_manager.send_plugin_message("FilamentMonitor", self.status)
-
     # Connect to and reset the device on after startup
 
     # Keep up-to-date on the spool status, saving the latest in self.status
@@ -82,6 +80,12 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
         self.status = self.get_status()
         self._logger.info(f"FilaScale status: {self.status}")
         return True
+
+    # Send status to octofarm
+    def send_status(self):
+        if self.status is None:
+            return
+        self._plugin_manager.send_plugin_message("FilamentMonitor", self.status)
 
     def on_after_startup(self):
         self.status = None
@@ -94,12 +98,8 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
         self.filamon.connect()
         if self.filamon.connected():
             self._logger.info("Connected to FilaScale")
-            self.filamon.perform_reset()
-
-            # just for testing (so we don't have to wait for a print to get to 1%!)
-            if TEST:
-                self.timer = octoprint.util.RepeatedTimer(5.0, self.filascale_poll)
-                self.timer.start()
+            self.timer = octoprint.util.RepeatedTimer(5.0, self.filascale_poll)
+            self.timer.start()
 
     def on_print_progress(self):
         if self.filamon.connected():
