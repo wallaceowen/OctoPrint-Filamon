@@ -13,6 +13,7 @@ The empty spool weight is expected to be stored in a spools table or (more facto
 
 * The filament monitor is a small widget with temp, humidity, weight sensors and an RFID tag reader, using an ESP32, BME280, HX711 attached to a 5KG load cell.  It also has a 2.8-inch TFT with a resistive touch-screen and SD-card, and some room for expansion (extra pins brought out to headers with power and ground).  It's code (currently called FilaScale) is another repo of mine that's being actively developed.
 
+Find it's code at https://github.com/wallaceowen/FilaScale/tree/master
 
 ## Setup
 
