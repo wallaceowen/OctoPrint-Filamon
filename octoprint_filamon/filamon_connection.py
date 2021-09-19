@@ -31,22 +31,18 @@ import errno
 from . import crc
 
 # How long we hold down the reset line
-FILAMON_RESET_DURATION = 1.0
+FILAMON_RESET_DURATION = 2.0
+FILAMON_PAUSE_AFTER_RESET = 4.0
+
 FILAMON_TIMEOUT = 1.0
 FILAMON_BAUDRATE = 115200
-
-SYNC_BYTE = 0x55
-sbyte = "%2.2X"%(SYNC_BYTE)
-
-# Max size for payload
-MAX_DATA_SIZE=512
-
-# Number of message types
-NUM_VALID_MESSAGES = 4
-
 FILAMON_RETRIES = 3
+FILAMON_SYNC_BYTE = 0x55
+FILAMON_MAX_DATA_SIZE=512
 
+NUM_VALID_MESSAGES = 4
 # Message types, umbered from zero.  This decl forces NUM_VALID_MESSAGES to be maintained.
+# Note: Only STATUS message implemented so far.  May be the only one needed.
 MT_STATUS, MT_CONFIG, MT_START, MT_STOP = range(NUM_VALID_MESSAGES)
 
 class NoConnection(Exception):
@@ -85,7 +81,8 @@ def bytes_to_hex(msg):
     return ' '.join(["%2.2X"%b for b in msg])
 
 class FilamonConnection():
-    def __init__(self, preferred=None, excluded=None, baudrate=FILAMON_BAUDRATE, connected_cb = None):
+    def __init__(self, logger, preferred=None, excluded=None, baudrate=FILAMON_BAUDRATE, connected_cb = None):
+        self._logger = logger
         self.preferred = preferred
         self.excluded = excluded
         self.baudrate = baudrate
@@ -195,6 +192,25 @@ class FilamonConnection():
                         break
                     self.interface.read(iw)
 
+    # Eat all bytes in socket
+    def drain_input(self):
+        if self.interface:
+            iw = self.interface.inWaiting()
+            while iw > 0:
+                try:
+                    residue = self.interface.read(iw)
+                except serial.SerialException as err:
+                    if err.errno in (errno.EAGAIN, errno.EINTR):
+                        continue
+                    else:
+                        raise NoConnection()
+                except Exception as err:
+                    self._logger.info("FilaMon plugin Got %s draining input", err)
+                    raise NoConnection()
+                else:
+                    break
+                self.interface.read(iw)
+
     # Receive a message from the serial port, in the expected form:
     # 1 bytes SYNC
     # 1 byte  MSG_TYPE
@@ -264,7 +280,7 @@ class FilamonConnection():
 
         def parse_header(header_bytes):
 
-            # If we can't, raise ShortMsg
+            # If we can't read the header raise ShortMsg
             if not len(header_bytes) == 3:
                 raise ShortMsg()
 
@@ -276,7 +292,7 @@ class FilamonConnection():
                 raise BadMsgType()
 
             # Validate length
-            if length > MAX_DATA_SIZE:
+            if length > FILAMON_MAX_DATA_SIZE:
                 raise BadSize(length)
 
             return _type, length
@@ -286,7 +302,7 @@ class FilamonConnection():
         def read_sync():
             while True:
                 bytes_in = _read_bytes(1)
-                if bytes_in[0] == SYNC_BYTE:
+                if bytes_in[0] == FILAMON_SYNC_BYTE:
                     break
 
         def read_body(desired):
@@ -305,8 +321,8 @@ class FilamonConnection():
 
         def check_crc(header_bytes, body, rcrc):
             # Compose the message to get our expected CRC
-            # msg = chr(SYNC_BYTE)+header_bytes+body
-            msg = [int(SYNC_BYTE)]
+            # msg = chr(FILAMON_SYNC_BYTE)+header_bytes+body
+            msg = [int(FILAMON_SYNC_BYTE)]
             msg.extend(header_bytes)
             msg.extend(body)
 
@@ -331,11 +347,9 @@ class FilamonConnection():
 
         # extract the message type and length from the header
         _type, length = parse_header(header_bytes)
-        # print("length of rec'd msg: {}".format(length))
 
         # Read the body
         body = read_body(length)
-        # print("body of rec'd msg: {}".format(bytes_to_hex(body)))
 
         # read the received CRC.
         rcrc = read_crc()
@@ -358,6 +372,7 @@ class FilamonConnection():
             self.interface.rts = 0
             time.sleep(FILAMON_RESET_DURATION)
             self.interface.rts = 1
+            time.sleep(FILAMON_PAUSE_AFTER_RESET)
 
     # Compose a message.  Pass the type and optional body.
     def compose(self, _type, body=b''):
