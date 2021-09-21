@@ -40,10 +40,10 @@ FILAMON_RETRIES = 3
 FILAMON_SYNC_BYTE = 0x55
 FILAMON_MAX_DATA_SIZE=512
 
-NUM_VALID_MESSAGES = 4
+NUM_VALID_MESSAGES = 5
 # Message types, umbered from zero.  This decl forces NUM_VALID_MESSAGES to be maintained.
 # Note: Only STATUS message implemented so far.  May be the only one needed.
-MT_STATUS, MT_CONFIG, MT_START, MT_STOP = range(NUM_VALID_MESSAGES)
+MT_STATUS, MT_CONFIG, MT_START, MT_STOP, MT_THRESHOLD = range(NUM_VALID_MESSAGES)
 
 class NoConnection(Exception):
     def __str__(self):
