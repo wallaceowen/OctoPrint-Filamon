@@ -28,7 +28,7 @@ import time
 import struct
 import errno
 
-from . import crc
+from .crc import crc16
 
 # How long we hold down the reset line
 FILAMON_RESET_DURATION = 2.0
@@ -80,8 +80,13 @@ class BadMsgType(Exception):
 def bytes_to_hex(msg):
     return ' '.join(["%2.2X"%b for b in msg])
 
-class FilamonConnection():
-    def __init__(self, logger, preferred=None, excluded=None, baudrate=FILAMON_BAUDRATE, connected_cb = None):
+class FilamonConnection(object):
+    def __init__(self,
+            logger,
+            preferred=None,
+            excluded=None,
+            baudrate=FILAMON_BAUDRATE,
+            connected_cb=None):
         self._logger = logger
         self.preferred = preferred
         self.excluded = excluded
@@ -327,7 +332,7 @@ class FilamonConnection():
             msg.extend(body)
 
             # compute the CRC of the received message
-            ccrc = crc.crc16(msg)
+            ccrc = crc16(msg)
 
             # Compare it to the sent CRC
             return rcrc == ccrc
@@ -377,7 +382,7 @@ class FilamonConnection():
     # Compose a message.  Pass the type and optional body.
     def compose(self, _type, body=b''):
         vals = struct.pack("<BBH", 0x55, _type, len(body))
-        ccrc = crc.crc16(vals+body)
+        ccrc = crc16(vals+body)
         if len(body):
             msg = struct.pack("<BBH%dsH"%len(body),
                     0x55, _type, len(body), body, ccrc)
