@@ -38,5 +38,5 @@ Uses a WeMos D1 Mini (an ESP8266) with an HX711 bridge exciter/amplifier and a B
 This project connects the load cell amplifier directly to the pi running octoprint.
 
 
-## Why a another?
+## Why another?
 I needed something that provided more robust communications directly to a PI than 3.3v signalling to the HX711 would provide; And not to use a wireless protocol because I want to be able to support a large farm and adding dozens of wireless nodes to an industrial environment doesn't scale.  Since USB offers high noise immunity with it's differential signalling, and a FilaScale monitoring the spool will be in close proximity to the controlling OctoPi, a direct connection to it seemed the best approach.
