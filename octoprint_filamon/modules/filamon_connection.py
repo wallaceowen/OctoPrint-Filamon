@@ -38,7 +38,7 @@ FILAMON_TIMEOUT = 1.0
 FILAMON_BAUDRATE = 115200
 FILAMON_RETRIES = 3
 FILAMON_SYNC_BYTE = 0x55
-FILAMON_MAX_DATA_SIZE=512
+FILAMON_MAX_DATA_SIZE=1024
 
 NUM_VALID_MESSAGES = 5
 # Message types, umbered from zero.  This decl forces NUM_VALID_MESSAGES to be maintained.
@@ -84,12 +84,12 @@ class FilamonConnection(object):
     def __init__(self,
             logger,
             preferred=None,
-            excluded=None,
+            exclude=None,
             baudrate=FILAMON_BAUDRATE,
             connected_cb=None):
         self._logger = logger
         self.preferred = preferred
-        self.excluded = excluded
+        self.exclude = exclude
         self.baudrate = baudrate
         self.connected_cb = connected_cb
         self.interface = None
@@ -119,19 +119,27 @@ class FilamonConnection(object):
         globbed_ports = glob.glob("/dev/ttyUSB*")
         ports = []
 
-        # Start with the preferred port.  Cull it from the glob first
+        # Start with the preferred port if it is in glob list.
+        # (if it's not in the glob list it's not plugged in)
         if self.preferred:
             if self.preferred in globbed_ports:
                 globbed_ports.remove(self.preferred)
-            ports.append(self.preferred)
+                ports.append(self.preferred)
 
-        # Remove the excluded port (presumably the one attached to the printer)
-        if self.excluded:
-            if self.excluded in globbed_ports:
-                globbed_ports.remove(self.excluded)
+        # Remove the exclude port (presumably the one attached to the printer)
+        if self.exclude:
+            if self.exclude in globbed_ports:
+                globbed_ports.remove(self.exclude)
 
         # Add the globbed ports
         ports.extend(globbed_ports)
+
+        if not len(ports):
+            if self._logger:
+                self._logger.debug("No Filamon serial ports found.")
+            else:
+                print("No Filamon serial ports found.")
+            raise NoConnection()
 
         interface_config = {
                 "bytesize": serial.EIGHTBITS,
@@ -141,6 +149,11 @@ class FilamonConnection(object):
                 "xonxoff": 0}
         for port in ports:
             interface_config["port"] = port
+            if self._logger:
+                self._logger.info("Attempting connection using %s",
+                        interface_config)
+            else:
+                print(f"Attempting connection using {interface_config }")
             try:
                 ser = serial.Serial(**interface_config)
             except serial.SerialException as err:
@@ -210,7 +223,10 @@ class FilamonConnection(object):
                     else:
                         raise NoConnection()
                 except Exception as err:
-                    self._logger.info("FilaMon plugin Got %s draining input", err)
+                    if self._logger:
+                        self._logger.info("FilaMon plugin Got %s draining input", err)
+                    else:
+                        print(f"FilaMon plugin Got {err} draining input")
                     raise NoConnection()
                 else:
                     break
@@ -298,7 +314,8 @@ class FilamonConnection(object):
 
             # Validate length
             if length > FILAMON_MAX_DATA_SIZE:
-                raise BadSize(length)
+                print(f'bad size: {length}')
+                raise BadSize()
 
             return _type, length
 
@@ -392,4 +409,9 @@ class FilamonConnection(object):
 
     def send_body(self, _type, body=''):
         msg = self.compose(_type, body.encode('utf-8'))
+        if self._logger:
+            self._logger.info("send_body sending type %d body %s",
+                    _type, body)
+        else:
+            print(f"send_body sending type {_type} body {body}")
         self.send_msg(msg)

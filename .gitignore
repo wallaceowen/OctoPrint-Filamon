@@ -3,6 +3,7 @@
 .idea
 *.iml
 build
+tags
 dist
 *.egg*
 .DS_Store

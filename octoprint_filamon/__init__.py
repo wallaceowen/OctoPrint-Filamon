@@ -21,7 +21,7 @@ from .modules.thresholds import DEFAULT_THRESHOLDS
 TEST = True
 POLL_INTERVAL = 5.0
 VERBOSE = True
-SEND_CONFIG_TO_FILAMON = False
+SEND_THRESHOLDS_TO_FILAMON = True
 
 class FilamonPlugin(octoprint.plugin.SettingsPlugin,
     octoprint.plugin.AssetPlugin,
@@ -78,14 +78,16 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
             else:
                 self._logger.info("Requested status but received type %s", _type)
 
-    if SEND_CONFIG_TO_FILAMON:
-        def send_configuration(self):
-            thresholds = self._settings.get(["thresholds"])
+    if SEND_THRESHOLDS_TO_FILAMON:
+        def send_thresholds(self):
+            filament_type = self._settings.get(["filament_type"])
+            all_thresholds = self._settings.get(["thresholds"])
+            thresholds = all_thresholds[filament_type]
+            thresholds.update({"filament_type": filament_type})
             thresh_str = json.dumps(thresholds)
-            self._logger.info("send_config: thresholds = %s", thresholds)
             if self.filamon.connected():
                 try:
-                    reply = self.exchange(fc.MT_CONFIG, thresh_str)
+                    reply = self.exchange(fc.MT_THRESHOLD, thresh_str)
                 except fc.RetriesExhausted:
                     self._logger.debug("FilaMon plugin: out of retries")
                     raise ValueError
@@ -93,19 +95,10 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
                     pass
                 else:
                     _type, body = reply
-                    if _type == fc.MT_CONFIG:
-                        json_msg = body.decode('utf-8')
-                        try:
-                            json_data = json.loads(json_msg)
-                        except json.JSONDecodeError as err:
-                            self._logger.exception("FilaScale got bad json \"%s\"", json_msg)
-                            raise ValueError()
-                        else:
-                            self._logger.info("FilaScale got config reply \"%s\"", json_data)
+                    if _type == fc.MT_THRESHOLD:
+                        self._logger.info("FilaScale got thresholds reply")
                     else:
-                        self._logger.info("Requested config but received type %s", _type)
-
-            thresholds = self._settings.get(["thresholds"])
+                        self._logger.info("Sent thresholds but received type %s", _type)
 
     # STATUS_FMT = "{\"spool_id\": %llu, \"temp\": %3.3f, \"humidity\": %3.3f, \"weight\": %3.3f}"
     def check_thresholds(self, status):
@@ -119,19 +112,29 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
         thresholds = self._settings.get(["thresholds"])
         filament_type = self._settings.get(["filament_type"])
         limits = thresholds[filament_type]
-        ents = ( ("Humidity", "humidity"), ("DryingTemp", "temp"))
+        ents = (
+                ("Humidity", "humidity"),
+                ("DryingTemp", "temp"),
+                ("Weight", "weight"),
+                )
         for ent in ents:
             check_limit(ent[0], limits[ent[0]], status[ent[1]])
 
     # Keep up-to-date on the spool status, saving the latest in self.status
     def filascale_poll(self):
         if VERBOSE:
-            self._logger.info("FilaScale polling")
+            self._logger.debug("FilaScale polling")
         # Try to connect if not connected
         if not self.filamon.connected():
             if VERBOSE:
-                self._logger.info("FilaScale connecting")
-            self.filamon.connect()
+                self._logger.debug("FilaScale poll connecting")
+            try:
+                self.filamon.connect()
+            except fc.NoConnection:
+                pass
+            else:
+                if SEND_THRESHOLDS_TO_FILAMON:
+                    self.send_thresholds()
 
         if self.filamon.connected():
             try:
@@ -157,8 +160,11 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
     def on_after_startup(self):
         self.status = None
         if VERBOSE:
-            self._logger.info("Filament Monitor config: %s, %s",
-                    self._settings.get(["port"]), self._settings.get(["baudrate"]))
+            self._logger.info("Filament Monitor config: %s, %s, %s, %s",
+                    self._settings.get(["port"]),
+                    self._settings.get(["baudrate"]),
+                    self._settings.get(["thresholds"]),
+                    self._settings.get(["filament_type"]))
         _, exclude, _, _ = self._printer.get_current_connection()
         preferred = self._settings.get(["port"])
         baudrate = self._settings.get(["baudrate"])
@@ -170,9 +176,16 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
                 baudrate,
                 self.connect_cb)
         # self.filamon.set_connected_cb(self.connect_cb)
-        self.filamon.connect()
-        if SEND_CONFIG_TO_FILAMON:
-            self.send_configuration()
+        try:
+            self.filamon.connect()
+        except fc.NoConnection:
+            pass
+        else:
+            if SEND_THRESHOLDS_TO_FILAMON:
+                try:
+                    self.send_thresholds()
+                except ValueError:
+                    pass
 
         # whether we connected or not, start running filascale_poll every POLL_INTERVAL seconds
         self.timer = octoprint.util.RepeatedTimer(POLL_INTERVAL, self.filascale_poll)
