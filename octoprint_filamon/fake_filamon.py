@@ -30,7 +30,7 @@ class FakeFilamon(threading.Thread):
         try:
             self.filamon.connect()
         except fc.NoConnection:
-            print("No connection!")
+            print('fake filamon ctor: No connection')
         threading.Thread.__init__(self, name="FakeFilamon")
         self.daemon = True
         self.terminate = False

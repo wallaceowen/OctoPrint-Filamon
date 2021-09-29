@@ -46,34 +46,30 @@ NUM_VALID_MESSAGES = 5
 MT_STATUS, MT_CONFIG, MT_START, MT_STOP, MT_THRESHOLD = range(NUM_VALID_MESSAGES)
 
 class NoConnection(Exception):
-    def __str__(self):
-        return "No connection"
+    pass
 
 class NoData(Exception):
-    def __str__(self):
-        return "No Data"
+    pass
 
 class ShortMsg(Exception):
-    def __str__(self):
-        return "Short Message"
+    pass
 
 class BadSize(Exception):
-    def __str__(self):
-        return "Bad message size"
+    pass
 
 # Ran out of retries - we can't communicate with the chip resetter
 class RetriesExhausted(Exception):
-    def __str__(self):
-        return "Retries exhausted"
+    pass
 
 class BadCRC(Exception):
-    def __str__(self):
-        return "Bad CRC"
+    pass
 
 # Message type field contains an invalid message ID
 class BadMsgType(Exception):
+    def __init__(self, _type):
+        self._type = _type
     def __str__(self):
-        return "Invalid Message type"
+        return "Invalid Message type {}".format(self._type)
 
 # Simple hex dumper for byte arrays.  (I still haven't memorised the grammar of the new
 # formatting layout options.)
@@ -310,7 +306,7 @@ class FilamonConnection(object):
 
             # Validate type
             if not _type in range(NUM_VALID_MESSAGES):
-                raise BadMsgType()
+                raise BadMsgType(_type)
 
             # Validate length
             if length > FILAMON_MAX_DATA_SIZE:

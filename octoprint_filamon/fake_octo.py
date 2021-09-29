@@ -45,10 +45,10 @@ class FakeOcto(threading.Thread):
             except fc.NoData:
                 time.sleep(0.1)
             except (fc.ShortMsg, fc.BadMsgType, fc.BadSize, fc.BadCRC) as err:
-                print("fake filamon: Error {} trying to get msg".format(err))
+                print("fake octo: error {} trying to get msg".format(err))
                 continue
             except fc.NoConnection:
-                print('fake filamon: No connection')
+                print('fake octo: No connection')
                 raise
             else:
                 # print('fake filamon: received type: %d body: [%s]'%( _type, body))
