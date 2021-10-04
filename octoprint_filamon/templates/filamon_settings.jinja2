@@ -1,0 +1,38 @@
+<h3>Filament Monitor</h3>
+
+<div>
+    <p>This plugin monitors filament in a drybox during a print.  It monitors:</p>
+    <ul>
+        <li>The humidity of the filament on the spool</li>
+        <li>The temperature of the air in the drybox, for PID of a drying heater to specified max drying temp</li>
+        <li>The weight of the filament and the spool containing it.  Of course, for this to be useful the spool weight should be known</li>
+        <li>The token value of the RFID tag attached to the spool, for tracking the spool in a spool database, to know the empty spool weight</li>
+    </ul>
+</div>
+<hr>
+<form class="form-horizontal">
+    <div class="control-group">
+        <label class="control-label">{{ _('Filament') }}</label>
+        <div class="controls">
+            <input type="text" class="input-medium" data-bind="value: settings.plugins.filamon.filamenttype">
+        </div>
+    </div>
+    <div class="control-group">
+        <label class="control-label">{{ _('Humidity alert level') }}</label>
+        <div class="controls">
+            <input type="number" class="input-mini text-right" data-bind="value: settings.plugins.filamon.maxhumidity"><span class="add-on">%</span>
+        </div>
+    </div>
+    <div class="control-group">
+        <label class="control-label">{{ _('Drying Temp alert level') }}</label>
+        <div class="controls">
+            <input type="number" class="input-mini text-right" data-bind="value: settings.plugins.filamon.maxdrytemp"><span class="add-on">℃</span>
+        </div>
+    </div>
+    <div class="control-group">
+        <label class="control-label">{{ _('Min filament remaining alert level') }}</label>
+        <div class="controls">
+            <input type="number" class="input-mini text-right" data-bind="value: settings.plugins.filamon.minspoolwt"><span class="add-on">g</span>
+        </div>
+    </div>
+</form>

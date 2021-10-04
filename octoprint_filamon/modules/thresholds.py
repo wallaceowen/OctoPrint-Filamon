@@ -25,3 +25,4 @@ DEFAULT_THRESHOLDS = {
         "Weight": { "min": 200, "max": 5000 },
         }
     }
+

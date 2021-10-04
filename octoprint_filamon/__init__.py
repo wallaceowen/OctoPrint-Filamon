@@ -1,14 +1,6 @@
 # coding=utf-8
 from __future__ import absolute_import
 
-### (Don't forget to remove me)
-# This is a basic skeleton for your plugin's __init__.py. You probably want to adjust the class name of your plugin
-# as well as the plugin mixins it's subclassing from. This is really just a basic skeleton to get you started,
-# defining your plugin as a template plugin, settings and asset plugin. Feel free to add or remove mixins
-# as necessary.
-#
-# Take a look at the documentation on what other plugin mixins are available.
-
 import time
 import json
 import threading
@@ -21,7 +13,7 @@ from .modules.thresholds import DEFAULT_THRESHOLDS
 TEST = True
 POLL_INTERVAL = 5.0
 VERBOSE = True
-SEND_THRESHOLDS_TO_FILAMON = True
+SEND_THRESHOLDS_TO_FILAMON = False
 
 class FilamonPlugin(octoprint.plugin.SettingsPlugin,
     octoprint.plugin.AssetPlugin,
@@ -80,10 +72,10 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
 
     if SEND_THRESHOLDS_TO_FILAMON:
         def send_thresholds(self):
-            filament_type = self._settings.get(["filament_type"])
+            filamenttype = self._settings.get(["filamenttype"])
             all_thresholds = self._settings.get(["thresholds"])
-            thresholds = all_thresholds[filament_type]
-            thresholds.update({"filament_type": filament_type})
+            thresholds = all_thresholds[filamenttype]
+            thresholds.update({"filamenttype": filamenttype})
             thresh_str = json.dumps(thresholds)
             if self.filamon.connected():
                 try:
@@ -110,8 +102,8 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
                 # pass
 
         thresholds = self._settings.get(["thresholds"])
-        filament_type = self._settings.get(["filament_type"])
-        limits = thresholds[filament_type]
+        filamenttype = self._settings.get(["filamenttype"])
+        limits = thresholds[filamenttype]
         ents = (
                 ("Humidity", "humidity"),
                 ("DryingTemp", "temp"),
@@ -143,7 +135,7 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
                 pass
             else:
                 if VERBOSE:
-                    self._logger.info(f"FilaScale status: {self.status}")
+                    self._logger.info(f"FilaScale status: %s", self.status)
                 self.check_thresholds(self.status)
 
         return True
@@ -160,11 +152,13 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
     def on_after_startup(self):
         self.status = None
         if VERBOSE:
-            self._logger.info("Filament Monitor config: %s, %s, %s, %s",
+            self._logger.info("Filament Monitor config: %s, %s, %s, %s, %s, %s",
                     self._settings.get(["port"]),
                     self._settings.get(["baudrate"]),
-                    self._settings.get(["thresholds"]),
-                    self._settings.get(["filament_type"]))
+                    self._settings.get(["maxhumidity"]),
+                    self._settings.get(["maxdrytemp"]),
+                    self._settings.get(["minspoolwt"]),
+                    self._settings.get(["filamenttype"]))
         _, exclude, _, _ = self._printer.get_current_connection()
         preferred = self._settings.get(["port"])
         baudrate = self._settings.get(["baudrate"])
@@ -175,17 +169,13 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
                 exclude,
                 baudrate,
                 self.connect_cb)
-        # self.filamon.set_connected_cb(self.connect_cb)
         try:
             self.filamon.connect()
         except fc.NoConnection:
             pass
         else:
             if SEND_THRESHOLDS_TO_FILAMON:
-                try:
-                    self.send_thresholds()
-                except ValueError:
-                    pass
+                self.send_thresholds()
 
         # whether we connected or not, start running filascale_poll every POLL_INTERVAL seconds
         self.timer = octoprint.util.RepeatedTimer(POLL_INTERVAL, self.filascale_poll)
@@ -195,21 +185,47 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
         if self.filamon.connected():
             self.send_status()
 
+    # ##~~ SettingsPlugin mixin
+    # def get_settings_defaults(self):
+        # return {
+            # 'port': '/dev/ttyUSB0',
+            # 'baudrate': 115200,
+            # 'filamenttype': 'Nylon',
+            # 'thresholds': DEFAULT_THRESHOLDS,
+        # }
+
     ##~~ SettingsPlugin mixin
     def get_settings_defaults(self):
+        # filament_type = self._settings.get(["filamenttype"]))
+        filamenttype = 'Nylon'
+        thresholds = DEFAULT_THRESHOLDS[filamenttype]
         return {
             'port': '/dev/ttyUSB0',
             'baudrate': 115200,
-            'thresholds': DEFAULT_THRESHOLDS,
-            'filament_type': 'Nylon'
+            'filamenttype': filamenttype,
+            'thresholds': thresholds,
+            'maxhumidity': thresholds["Humidity"]["max"],
+            'maxdrytemp': thresholds["DryingTemp"]["max"],
+            'minspoolwt': thresholds["Weight"]["min"]
         }
 
     def get_template_vars(self):
+        filamenttype=self._settings.get(["filamenttype"]),
+        thresholds=self._settings.get(["thresholds"])
         return dict(
                 port=self._settings.get(["port"]),
                 baudrate=self._settings.get(["baudrate"]),
-                thresholds=self._settings.get(["thresholds"])
+                filamenttype=self._settings.get(["filamenttype"]),
+                maxhumidity=thresholds["Humidity"]["max"],
+                maxdrytemp=thresholds["DryingTemp"]["max"],
+                minspoolwt=thresholds["Weight"]["min"]
                 )
+
+    def get_template_configs(self):
+        return [
+            dict(type="settings", custom_bindings=False)
+        ]
+
 
     ##~~ AssetPlugin mixin
 
