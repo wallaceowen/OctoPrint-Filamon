@@ -12,25 +12,19 @@
 <hr>
 <form class="form-horizontal">
     <div class="control-group">
-        <label class="control-label">{{ _('Filament') }}</label>
-        <div class="controls">
-            <input type="text" class="input-medium" data-bind="value: settings.plugins.filamon.filamenttype">
-        </div>
-    </div>
-    <div class="control-group">
-        <label class="control-label">{{ _('Humidity alert level') }}</label>
+        <label class="control-label">{{ _('Humidity threshold') }}</label>
         <div class="controls">
             <input type="number" class="input-mini text-right" data-bind="value: settings.plugins.filamon.maxhumidity"><span class="add-on">%</span>
         </div>
     </div>
     <div class="control-group">
-        <label class="control-label">{{ _('Drying Temp alert level') }}</label>
+        <label class="control-label">{{ _('Drying Temp') }}</label>
         <div class="controls">
             <input type="number" class="input-mini text-right" data-bind="value: settings.plugins.filamon.maxdrytemp"><span class="add-on">℃</span>
         </div>
     </div>
     <div class="control-group">
-        <label class="control-label">{{ _('Min filament remaining alert level') }}</label>
+        <label class="control-label">{{ _('Min filament threshold') }}</label>
         <div class="controls">
             <input type="number" class="input-mini text-right" data-bind="value: settings.plugins.filamon.minspoolwt"><span class="add-on">g</span>
         </div>

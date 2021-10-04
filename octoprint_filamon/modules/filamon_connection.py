@@ -26,6 +26,7 @@ import glob
 import serial
 import time
 import struct
+import json
 import errno
 
 from .crc import crc16
@@ -411,3 +412,51 @@ class FilamonConnection(object):
         else:
             print(f"send_body sending type {_type} body {body}")
         self.send_msg(msg)
+
+    # Tell the device to send us status.
+    # Either returns a tuple (msg_type, body) or raises RetriesExhausted or NoConnection
+    def exchange(self, mt, body=''):
+        self.send_body(mt, body)
+
+        # Try to read that status
+        for tries in range(FILAMON_RETRIES):
+            _type = None
+            try:
+                _type, body = self.recv_msg()
+            except NoData:
+                continue
+            except (ShortMsg, BadMsgType, BadSize, BadCRC) as err:
+                self._logger.info("Caught error %s sending query to filascale", err)
+            except NoConnection:
+                self._logger.info('SERVER: lost connection')
+                raise
+            else:
+                return (_type, body)
+
+        raise RetriesExhausted()
+
+
+    # Fetch the latest status from FilaScale.  Raises ValueError if no status available.
+    def request_status(self):
+        try:
+            reply = self.exchange(MT_STATUS)
+        except RetriesExhausted:
+            self._logger.debug("FilaMon plugin: out of retries")
+            self.perform_reset()
+            raise ValueError
+        except NoConnection:
+            raise ValueError
+        else:
+            _type, body = reply
+            if _type == MT_STATUS:
+                json_msg = body.decode('utf-8')
+                try:
+                    json_data = json.loads(json_msg)
+                except json.JSONDecodeError as err:
+                    self._logger.exception("FilaScale got bad json \"%s\"", json_msg)
+                    raise ValueError()
+                else:
+                    return json_data
+            else:
+                self._logger.info("Requested status but received type %s", _type)
+
