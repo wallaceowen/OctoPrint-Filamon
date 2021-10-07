@@ -18,11 +18,13 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
     octoprint.plugin.AssetPlugin,
     octoprint.plugin.TemplatePlugin,
     octoprint.plugin.StartupPlugin,
+    octoprint.plugin.ShutdownPlugin,
     octoprint.plugin.ProgressPlugin):
 
     def on_startup(self, host, port):
         self._logger.debug("Filament Monitor at startup.")
 
+    # Kinda empty currently.  This might be where an event is sent to n event server
     def check_thresholds(self, status):
 
         def check_limit(ent, status):
@@ -40,6 +42,7 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
             check_limit(ent, status)
 
     # Keep up-to-date on the spool status, saving the latest in self.status
+    # Check the thresholds each time, where actions may be taken (alert the user, etc)
     def filascale_poll(self):
 
         # Try to connect if not connected
@@ -103,6 +106,10 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
         if self.filamon.connected():
             self.send_status()
 
+    # Release the serial port if we have it
+    def on_shutdown(self):
+        self.filamon.disconnect()
+
     ##~~ SettingsPlugin mixin
     def get_settings_defaults(self):
         thresholds = DEFAULT_THRESHOLDS
@@ -115,7 +122,6 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
         }
 
     def get_template_vars(self):
-        # thresholds=self._settings.get(["thresholds"])
         return dict(
                 port=self._settings.get(["port"]),
                 baudrate=self._settings.get(["baudrate"]),

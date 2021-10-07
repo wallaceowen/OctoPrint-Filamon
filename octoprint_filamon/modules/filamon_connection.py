@@ -35,7 +35,7 @@ from .crc import crc16
 FILAMON_RESET_DURATION = 2.0
 FILAMON_PAUSE_AFTER_RESET = 4.0
 
-FILAMON_TIMEOUT = 1.0
+FILAMON_TIMEOUT = 0.3
 FILAMON_BAUDRATE = 115200
 FILAMON_RETRIES = 3
 FILAMON_SYNC_BYTE = 0x55
@@ -100,7 +100,7 @@ class FilamonConnection(object):
             self.interface.timeout = timeout
 
     def disconnect(self):
-        if self.interface:
+        if self.connected():
             self.interface.close()
             self.interface = None
 
@@ -132,10 +132,7 @@ class FilamonConnection(object):
         ports.extend(globbed_ports)
 
         if not len(ports):
-            if self._logger:
-                self._logger.debug("No Filamon serial ports found.")
-            else:
-                print("No Filamon serial ports found.")
+            self._logger.debug("No Filamon serial ports found.")
             raise NoConnection()
 
         interface_config = {
@@ -146,11 +143,7 @@ class FilamonConnection(object):
                 "xonxoff": 0}
         for port in ports:
             interface_config["port"] = port
-            if self._logger:
-                self._logger.info("Attempting connection using %s",
-                        interface_config)
-            else:
-                print(f"Attempting connection using {interface_config }")
+            self._logger.info("Attempting connection using %s", interface_config)
             try:
                 ser = serial.Serial(**interface_config)
             except serial.SerialException as err:
@@ -220,10 +213,7 @@ class FilamonConnection(object):
                     else:
                         raise NoConnection()
                 except Exception as err:
-                    if self._logger:
-                        self._logger.info("FilaMon plugin Got %s draining input", err)
-                    else:
-                        print(f"FilaMon plugin Got {err} draining input")
+                    self._logger.info("FilaMon plugin Got %s draining input", err)
                     raise NoConnection()
                 else:
                     break
@@ -406,11 +396,7 @@ class FilamonConnection(object):
 
     def send_body(self, _type, body=''):
         msg = self.compose(_type, body.encode('utf-8'))
-        if self._logger:
-            self._logger.info("send_body sending type %d body %s",
-                    _type, body)
-        else:
-            print(f"send_body sending type {_type} body {body}")
+        self._logger.debug("send_body sending type %d body %s", _type, body)
         self.send_msg(msg)
 
     # Tell the device to send us status.
