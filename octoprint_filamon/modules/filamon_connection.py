@@ -132,7 +132,8 @@ class FilamonConnection(object):
         ports.extend(globbed_ports)
 
         if not len(ports):
-            self._logger.debug("No Filamon serial ports found.")
+            if self._logger:
+                self._logger.debug("No Filamon serial ports found.")
             raise NoConnection()
 
         interface_config = {
@@ -143,7 +144,8 @@ class FilamonConnection(object):
                 "xonxoff": 0}
         for port in ports:
             interface_config["port"] = port
-            self._logger.info("Attempting connection using %s", interface_config)
+            if self._logger:
+                self._logger.info("Attempting connection using %s", interface_config)
             try:
                 ser = serial.Serial(**interface_config)
             except serial.SerialException as err:
@@ -213,7 +215,8 @@ class FilamonConnection(object):
                     else:
                         raise NoConnection()
                 except Exception as err:
-                    self._logger.info("FilaMon plugin Got %s draining input", err)
+                    if self._logger:
+                        self._logger.info("FilaMon plugin Got %s draining input", err)
                     raise NoConnection()
                 else:
                     break
@@ -396,7 +399,8 @@ class FilamonConnection(object):
 
     def send_body(self, _type, body=''):
         msg = self.compose(_type, body.encode('utf-8'))
-        self._logger.debug("send_body sending type %d body %s", _type, body)
+        if self._logger:
+            self._logger.debug("send_body sending type %d body %s", _type, body)
         self.send_msg(msg)
 
     # Tell the device to send us status.
@@ -412,9 +416,11 @@ class FilamonConnection(object):
             except NoData:
                 continue
             except (ShortMsg, BadMsgType, BadSize, BadCRC) as err:
-                self._logger.info("Caught error %s sending query to filascale", err)
+                if self._logger:
+                    self._logger.info("Caught error %s sending query to filascale", err)
             except NoConnection:
-                self._logger.info('SERVER: lost connection')
+                if self._logger:
+                    self._logger.info('SERVER: lost connection')
                 raise
             else:
                 return (_type, body)
@@ -427,7 +433,8 @@ class FilamonConnection(object):
         try:
             reply = self.exchange(MT_STATUS)
         except RetriesExhausted:
-            self._logger.debug("FilaMon plugin: out of retries")
+            if self._logger:
+                self._logger.debug("FilaMon plugin: out of retries")
             self.perform_reset()
             raise ValueError
         except NoConnection:
@@ -439,10 +446,12 @@ class FilamonConnection(object):
                 try:
                     json_data = json.loads(json_msg)
                 except json.JSONDecodeError as err:
-                    self._logger.exception("FilaScale got bad json \"%s\"", json_msg)
+                    if self._logger:
+                        self._logger.exception("FilaScale got bad json \"%s\"", json_msg)
                     raise ValueError()
                 else:
                     return json_data
             else:
-                self._logger.info("Requested status but received type %s", _type)
+                if self._logger:
+                    self._logger.info("Requested status but received type %s", _type)
 

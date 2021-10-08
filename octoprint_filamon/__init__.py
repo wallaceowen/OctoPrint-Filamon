@@ -1,18 +1,24 @@
 # coding=utf-8
 from __future__ import absolute_import
 
+import os
 import time
 import json
-import threading
+# import threading
+from datetime import datetime
+from threading import RLock
 
 import octoprint.plugin
 
 from .modules import filamon_connection as fc
 from .modules.thresholds import DEFAULT_THRESHOLDS
+from octoprint.util import monotonic_time
+from octoprint.events import Events, eventManager
 
 TEST = True
-POLL_INTERVAL = 5.0
+POLL_INTERVAL = 2.0
 VERBOSE = True
+
 
 class FilamonPlugin(octoprint.plugin.SettingsPlugin,
     octoprint.plugin.AssetPlugin,
@@ -21,10 +27,49 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
     octoprint.plugin.ShutdownPlugin,
     octoprint.plugin.ProgressPlugin):
 
-    def on_startup(self, host, port):
-        self._logger.debug("Filament Monitor at startup.")
+    def __init__(self):
+        self._status_lock = RLock()
+        self._status = {}
+        self._ending_spool_status = {}
+        self._z_samples = []
+        self.__filamon_count = 0
+        eventManager().subscribe(Events.PRINT_STARTED, self.on_print_started)
+        eventManager().subscribe(Events.PRINT_FAILED, self.on_print_done)
+        eventManager().subscribe(Events.PRINT_DONE, self.on_print_done)
+        eventManager().subscribe (Events.Z_CHANGE, self._on_z_change)
 
-    # Kinda empty currently.  This might be where an event is sent to n event server
+    def _add_sample(self):
+        self._z_samples.append((monotonic_time(), self.get_status()))
+
+    def on_print_started(self, event, payload):
+        self._z_samples.append((monotonic_time(), self.get_status()))
+
+    def on_print_done(self, event, payload):
+        def derive_spool_status_path():
+            timestamp = datetime.now().replace(microsecond=0).isoformat()
+            home = os.environ["HOME"]
+            path = "{}/spool_status_{}.log".format(home, timestamp)
+            return path
+        def save_spool_status(path):
+            with open(path, "w+") as f:
+                for entry in self._z_samples:
+                    when, status = entry
+                    print(f"{when}: {status}", file=f)
+                f.close()
+        self._z_samples.append((monotonic_time(), self.get_status()))
+        save_spool_status(derive_spool_status_path())
+
+    def _on_z_change(self, event, payload):
+        self._z_samples.append((monotonic_time(), self.get_status()))
+
+    def get_status(self):
+        with self._status_lock:
+            return self._status
+
+    def set_status(self, status):
+        with self._status_lock:
+            self._status = status
+
     def check_thresholds(self, status):
 
         def check_limit(ent, status):
@@ -56,36 +101,38 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
 
         if self.filamon.connected():
             try:
-                self.status = self.filamon.request_status()
+                status = self.filamon.request_status()
             except ValueError:
                 pass
             else:
+                self.set_status(status)
                 if VERBOSE:
-                    self._logger.info(f"FilaScale status: %s", self.status)
-                self.check_thresholds(self.status)
+                    self._logger.info(f"FilaScale status: %s", status)
+                self.check_thresholds(status)
+
+            self.__filamon_count += 1
+            if self.__filamon_count > 4:
+                self.on_print_done(None, None)
+                self.__filamon_count = 0
 
         return True
 
     # Send status to octofarm
     def send_status(self):
-        if not self.status is None:
-            self._plugin_manager.send_plugin_message("FilamentMonitor", self.status)
+        status = self.get_status()
+        if len(status.keys()):
+            self._plugin_manager.send_plugin_message("FilamentMonitor", status)
 
     def connect_cb(self, port):
         if VERBOSE:
             self._logger.info("Filament Monitor connected on port %s", port)
         # Now we can send some message to the device if we like - we now believe it's there.
 
+    # After octoprint is started, we attempt to connect to a filascale
     def on_after_startup(self):
-        self.status = None
         preferred = self._settings.get(["port"])
         baudrate = self._settings.get(["baudrate"])
-        if VERBOSE:
-            self._logger.info("Filament Monitor device config: port %s, baud %s",
-                    preferred, baudrate)
         _, exclude, _, _ = self._printer.get_current_connection()
-
-        # Connect to the device
         self.filamon = fc.FilamonConnection(
                 self._logger,
                 preferred,
@@ -97,8 +144,10 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
         except fc.NoConnection:
             pass
 
-        # whether we connected or not, start running filascale_poll every POLL_INTERVAL seconds
-        # which will continue to try to connect and manage any discovered FilaScale device.
+        # whether we connected or not, start running
+        # filascale_poll every POLL_INTERVAL seconds
+        # which will continue to try to connect and
+        # manage any discovered FilaScale device.
         self.timer = octoprint.util.RepeatedTimer(POLL_INTERVAL, self.filascale_poll)
         self.timer.start()
 
