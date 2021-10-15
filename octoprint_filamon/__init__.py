@@ -165,22 +165,25 @@ class FilamonPlugin(octoprint.plugin.SettingsPlugin,
         return {
             'port': '/dev/ttyUSB0',
             'baudrate': 115200,
-            'maxhumidity': thresholds["Humidity"]["max"],
-            'maxdrytemp': thresholds["DryingTemp"]["max"],
-            'minspoolwt': thresholds["Weight"]["min"]
+            'spoolname': 'Nylon',
+            'maxhumidity': thresholds['Humidity']['max'],
+            'maxdrytemp': thresholds['DryingTemp']['max'],
+            'minspoolwt': thresholds['Weight']['min']
         }
 
     def get_template_vars(self):
         return dict(
-                port=self._settings.get(["port"]),
-                baudrate=self._settings.get(["baudrate"]),
-                maxhumidity=self._settings.get(["maxhumidity"]),
-                maxdrytemp=self._settings.get(["maxdrytemp"]),
-                minspoolwt=self._settings.get(["minspoolwt"]))
+                port=self._settings.get(['port']),
+                baudrate=self._settings.get(['baudrate']),
+                spoolname=self._settings.get(['spoolname']),
+                maxhumidity=self._settings.get(['maxhumidity']),
+                maxdrytemp=self._settings.get(['maxdrytemp']),
+                minspoolwt=self._settings.get(['minspoolwt']))
 
     def get_template_configs(self):
         return [
-            dict(type="settings", custom_bindings=False)
+            dict(type='settings', custom_bindings=False),
+            dict(type='tab', custom_bindings=True)
         ]
 
 

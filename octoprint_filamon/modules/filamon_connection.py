@@ -417,7 +417,7 @@ class FilamonConnection(object):
                 continue
             except (ShortMsg, BadMsgType, BadSize, BadCRC) as err:
                 if self._logger:
-                    self._logger.info("Caught error %s sending query to filascale", err)
+                    self._logger.info("Caught error %s sending query to filascale", type(err))
             except NoConnection:
                 if self._logger:
                     self._logger.info('SERVER: lost connection')

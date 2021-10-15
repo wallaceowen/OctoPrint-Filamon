@@ -7,16 +7,20 @@ from __future__ import absolute_import
 import time
 import json
 import threading
+import logging
+from logging.handlers import SysLogHandler
 
-from . import filamon_connection as fc
+from .modules import filamon_connection as fc
 
 JSON_DATA = {"printername": "bender_prime", "spool_id": 1423659708, "temp": 38.0, "humidity": .48, "weight": 788}
 JSON_STRING = json.dumps(JSON_DATA)
 
 class FakeOcto(threading.Thread):
     def __init__(self, port):
+        self._logger = logging.getLogger("FilaMon")
+        self._logger.setLevel(logging.DEBUG)
         self.port = port
-        self.filacon = fc.FilamonConnection("/dev/ttyUSB0", "/dev/ttyUSB1", 115200)
+        self.filacon = fc.FilamonConnection(self._logger, "/dev/ttyUSB1", "/dev/ttyUSB0", 115200)
         self.filacon.connect()
         threading.Thread.__init__(self, name="FakeOcto")
         self.daemon = True
@@ -30,12 +34,14 @@ class FakeOcto(threading.Thread):
     def handle_client_msg(self, _type, body):
         if len(body):
             reply = body.decode('utf-8')
-            print(f"Handle Client: received {reply} from filascale")
+            print(f"Handle Client: received {_type}: {reply} from filascale")
         else:
-            print(f"Handle Client: received {type} from filascale")
+            print(f"Handle Client: received {_type} from filascale")
 
     def exchange(self):
         msg = self.filacon.compose(fc.MT_STATUS)
+        # msg = self.filacon.compose(fc.MT_CONFIG, b'{"scale": {"offset": 0, "gain": 1.01}}')
+        print(f'Sending {msg}')
         self.filacon.send_msg(msg)
 
         for tries in range(self.retries):
