@@ -270,12 +270,6 @@ class FilamonConnection(object):
 
             if not len(total):
                 raise NoData()
-            bstr = bytes(total)
-            try:
-                s = bstr.decode('utf-8')
-            except UnicodeDecodeError:
-                s = '|'
-            # sys.stdout.write(s)
             return bytes(total)
 
         # Try to read an N-byte CRC.  Pass it the length of the CRC

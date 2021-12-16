@@ -39,8 +39,8 @@ class FakeOcto(threading.Thread):
             print(f"Handle Client: received {_type} from filascale")
 
     def exchange(self):
-        msg = self.filacon.compose(fc.MT_STATUS)
-        # msg = self.filacon.compose(fc.MT_CONFIG, b'{"scale": {"offset": 0, "gain": 1.01}}')
+        # msg = self.filacon.compose(fc.MT_STATUS)
+        msg = self.filacon.compose(fc.MT_CONFIG, b'{"scale": {"offset": -114, "gain": 3.96}}')
         print(f'Sending {msg}')
         self.filacon.send_msg(msg)
 
